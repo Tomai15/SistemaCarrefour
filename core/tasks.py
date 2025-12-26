@@ -9,7 +9,8 @@ from asgiref.sync import async_to_sync
 from core.services.ReportePaywayService import ReportePaywayService
 from core.services.ReporteVtexService import ReporteVtexService
 from core.services.ReporteCDPService import ReporteCDPService
-from core.models import ReportePayway, ReporteVtex, ReporteCDP
+from core.services.CruceService import CruceService
+from core.models import ReportePayway, ReporteVtex, ReporteCDP, Cruce
 from django.conf import settings
 import logging
 import os
@@ -192,4 +193,52 @@ def generar_reporte_cdp_async(fecha_inicio, fecha_fin, reporte_id, ruta_carpeta=
 
     except Exception as e:
         logger.error(f"[Django-Q] Error al generar reporte CDP: {e}", exc_info=True)
+        raise
+
+
+def generar_cruce_async(cruce_id, reporte_vtex_id=None, reporte_payway_id=None, reporte_cdp_id=None):
+    """
+    Genera un cruce de reportes de forma asíncrona.
+
+    Esta función está diseñada para ser ejecutada por Django-Q workers.
+
+    Args:
+        cruce_id (int): ID del cruce creado en la base de datos
+        reporte_vtex_id (int, optional): ID del reporte VTEX a incluir
+        reporte_payway_id (int, optional): ID del reporte Payway a incluir
+        reporte_cdp_id (int, optional): ID del reporte CDP a incluir
+
+    Returns:
+        int: ID del cruce generado
+
+    Ejemplo de uso desde view:
+        from django_q.tasks import async_task
+
+        task_id = async_task(
+            'core.tasks.generar_cruce_async',
+            cruce_id,
+            reporte_vtex_id,
+            reporte_payway_id,
+            reporte_cdp_id
+        )
+    """
+    logger.info(f"[Django-Q] Iniciando generación asíncrona de cruce #{cruce_id}")
+
+    try:
+        # Instanciar el servicio
+        servicio = CruceService()
+
+        # Ejecutar la generación
+        resultado = async_to_sync(servicio.generar_cruce)(
+            cruce_id,
+            reporte_vtex_id,
+            reporte_payway_id,
+            reporte_cdp_id
+        )
+
+        logger.info(f"[Django-Q] Cruce #{cruce_id} generado exitosamente")
+        return cruce_id
+
+    except Exception as e:
+        logger.error(f"[Django-Q] Error al generar cruce: {e}", exc_info=True)
         raise

@@ -8,14 +8,16 @@ import os
 
 from django_q.tasks import async_task
 
-from core.models import ReportePayway, ReporteVtex, ReporteCDP, UsuarioPayway, UsuarioCDP
+from core.models import ReportePayway, ReporteVtex, ReporteCDP, Cruce, UsuarioPayway, UsuarioCDP
 from core.forms import (
     GenerarReportePaywayForm,
     GenerarReporteVtexForm,
     GenerarReporteCDPForm,
+    GenerarCruceForm,
     CredencialesPaywayForm,
     CredencialesCDPForm
 )
+from datetime import date
 
 
 # Create your views here.
@@ -428,3 +430,125 @@ def generar_reporte_cdp_view(request):
         form = GenerarReporteCDPForm()
 
     return render(request, 'core/CDP/generarReporte.html', {'form': form})
+
+
+# ==================== VISTAS CRUCES ====================
+
+class cruceListView(ListView):
+    """Vista de lista de cruces con paginación."""
+    model = Cruce
+    paginate_by = 50
+    template_name = 'core/Cruce/vistaCruces.html'
+    ordering = ['-id']
+
+
+class cruceDetailView(SingleObjectMixin, ListView):
+    """
+    Vista de detalle de cruce con paginación server-side de transacciones.
+
+    Combina SingleObjectMixin (para obtener el cruce) con ListView (para paginar transacciones).
+    """
+    template_name = 'core/Cruce/detalleCruce.html'
+    paginate_by = 20
+    context_object_name = 'transacciones'
+
+    def get(self, request, *args, **kwargs):
+        self.object = self.get_object(queryset=Cruce.objects.all())
+        return super().get(request, *args, **kwargs)
+
+    def get_queryset(self):
+        return self.object.transacciones.all().order_by('-fecha_hora')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['cruce'] = self.object
+        return context
+
+
+def exportar_cruce_excel(request, pk):
+    """Vista para exportar un cruce a Excel."""
+    cruce = get_object_or_404(Cruce, pk=pk)
+
+    # El modelo es responsable de generar el archivo y retornar su ruta
+    ruta_archivo = cruce.generar_reporter_excel()
+
+    if not os.path.exists(ruta_archivo):
+        raise Http404("El archivo no se generó correctamente")
+
+    nombre_archivo = os.path.basename(ruta_archivo)
+
+    response = FileResponse(
+        open(ruta_archivo, 'rb'),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{nombre_archivo}"'
+
+    return response
+
+
+def generar_cruce_view(request):
+    """
+    Vista para generar un nuevo cruce de reportes.
+
+    Muestra un formulario para seleccionar reportes y encola la generación del cruce.
+    """
+    if request.method == 'POST':
+        form = GenerarCruceForm(request.POST)
+
+        if form.is_valid():
+            reporte_vtex = form.cleaned_data.get('reporte_vtex')
+            reporte_payway = form.cleaned_data.get('reporte_payway')
+            reporte_cdp = form.cleaned_data.get('reporte_cdp')
+
+            # Determinar fecha_inicio y fecha_fin basándose en los reportes seleccionados
+            fechas_inicio = []
+            fechas_fin = []
+
+            if reporte_vtex:
+                fechas_inicio.append(reporte_vtex.fecha_inicio)
+                fechas_fin.append(reporte_vtex.fecha_fin)
+            if reporte_payway:
+                fechas_inicio.append(reporte_payway.fecha_inicio)
+                fechas_fin.append(reporte_payway.fecha_fin)
+            if reporte_cdp:
+                fechas_inicio.append(reporte_cdp.fecha_inicio)
+                fechas_fin.append(reporte_cdp.fecha_fin)
+
+            # Usar la fecha más temprana como inicio y la más tardía como fin
+            fecha_inicio = min(fechas_inicio)
+            fecha_fin = max(fechas_fin)
+
+            # Crear el cruce en estado PENDIENTE
+            nuevo_cruce = Cruce.objects.create(
+                fecha_inicio=fecha_inicio,
+                fecha_fin=fecha_fin,
+                estado=Cruce.Estado.PENDIENTE
+            )
+
+            # Encolar tarea en Django-Q
+            try:
+                task_id = async_task(
+                    'core.tasks.generar_cruce_async',
+                    nuevo_cruce.id,
+                    reporte_vtex.id if reporte_vtex else None,
+                    reporte_payway.id if reporte_payway else None,
+                    reporte_cdp.id if reporte_cdp else None
+                )
+
+                messages.success(
+                    request,
+                    f'Cruce encolado exitosamente. Puede visualizarlo en la lista de cruces.'
+                )
+
+                return redirect('lista_cruces')
+
+            except Exception as e:
+                messages.error(
+                    request,
+                    f'Error al crear el cruce: {str(e)}'
+                )
+
+    else:
+        form = GenerarCruceForm()
+
+    return render(request, 'core/Cruce/generarCruce.html', {'form': form})

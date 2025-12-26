@@ -24,4 +24,10 @@ urlpatterns = [
     path("reportesCDP/generar", views.generar_reporte_cdp_view, name="generar_reporte_cdp"),
     path("reportesCDP/<int:pk>/", views.reporteCDPDetailView.as_view(), name="detalle_reporte_cdp"),
     path("reportesCDP/<int:pk>/reporteExcel/", views.exportar_reporte_cdp_excel, name="exportar_reporte_cdp_excel"),
+
+    # Cruces
+    path("cruces", views.cruceListView.as_view(), name="lista_cruces"),
+    path("cruces/generar", views.generar_cruce_view, name="generar_cruce"),
+    path("cruces/<int:pk>/", views.cruceDetailView.as_view(), name="detalle_cruce"),
+    path("cruces/<int:pk>/exportar/", views.exportar_cruce_excel, name="exportar_cruce_excel"),
 ]

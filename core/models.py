@@ -135,6 +135,65 @@ class ReporteCDP(models.Model):
         return ruta_final
 
 
+class Cruce(models.Model):
+    class Estado(models.TextChoices):
+        PENDIENTE = 'PENDIENTE', _('Pendiente')
+        PROCESANDO = 'PROCESANDO', _('Procesando')
+        COMPLETADO = 'COMPLETADO', _('Completado')
+        ERROR = 'ERROR', _('Error')
+
+    estado = models.CharField(
+        max_length=15,
+        choices=Estado.choices,
+        default=Estado.PENDIENTE
+    )
+    fecha_inicio = models.DateField()
+    fecha_fin = models.DateField()
+    fecha_realizado = models.DateField(null=True, blank=True)
+
+    def generar_reporter_excel(self):
+        """
+        Genera el archivo Excel del cruce y retorna la ruta completa del archivo generado.
+
+        Returns:
+            str: Ruta completa del archivo Excel generado
+        """
+        ruta_final = os.path.join(settings.MEDIA_ROOT, f'cruce_{self.fecha_inicio}_to_{self.fecha_fin}.xlsx')
+        transacciones = self.transacciones.all()
+        transacciones_convertidas = list(map(lambda t: t.convertir_en_diccionario(), transacciones))
+        data_frame_transacciones = pd.DataFrame(transacciones_convertidas)
+        if not data_frame_transacciones.empty and 'fecha' in data_frame_transacciones.columns:
+            data_frame_transacciones['fecha'] = data_frame_transacciones['fecha'].dt.tz_localize(None)
+        data_frame_transacciones.to_excel(ruta_final, index=False)
+        return ruta_final
+
+
+class TransaccionCruce(models.Model):
+    numero_pedido = models.CharField(max_length=100)
+    fecha_hora = models.DateTimeField(null=True, blank=True)
+    medio_pago = models.CharField(max_length=100, blank=True, default='')
+    seller = models.CharField(max_length=100, blank=True, default='')
+    estado_vtex = models.CharField(max_length=100, blank=True, default='')
+    estado_payway = models.CharField(max_length=100, blank=True, default='')
+    estado_payway_2 = models.CharField(max_length=100, blank=True, default='')
+    estado_cdp = models.CharField(max_length=100, blank=True, default='')
+    estado_janis = models.CharField(max_length=100, blank=True, default='')
+    cruce = models.ForeignKey(Cruce, on_delete=models.CASCADE, related_name='transacciones')
+
+    def convertir_en_diccionario(self):
+        return {
+            'Pedido': self.numero_pedido,
+            'fecha': self.fecha_hora,
+            'medio_pago': self.medio_pago,
+            'seller': self.seller,
+            'estado_vtex': self.estado_vtex,
+            'estado_payway': self.estado_payway,
+            'estado_payway_2': self.estado_payway_2,
+            'estado_cdp': self.estado_cdp,
+            'estado_janis': self.estado_janis
+        }
+
+
 class TransaccionCDP(models.Model):
     numero_pedido = models.CharField(max_length=100)
     fecha_hora = models.DateTimeField()

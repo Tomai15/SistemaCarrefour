@@ -1,0 +1,292 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Detalle Cruce #{{ cruce.id }}{% endblock %}
+
+{% block content %}
+<article class="container py-5">
+    <!-- Header con botón volver -->
+    <header class="row mb-4">
+        <div class="col-12 mb-3">
+            <a href="{% url 'lista_cruces' %}" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left me-2"></i>
+                Volver a cruces
+            </a>
+        </div>
+        <div class="col-md-8">
+            <h1 class="display-5 fw-bold text-primary">
+                <i class="bi bi-intersect me-2"></i>
+                Cruce #{{ cruce.id }}
+            </h1>
+            <p class="text-muted">Detalle de transacciones cruzadas entre sistemas</p>
+        </div>
+        <div class="col-md-4 text-end d-flex align-items-center justify-content-end">
+            <a href="{% url 'exportar_cruce_excel' cruce.id %}" class="btn btn-success btn-lg shadow">
+                <i class="bi bi-file-earmark-spreadsheet me-2"></i>
+                Exportar a Excel
+            </a>
+        </div>
+    </header>
+
+    <!-- Información del cruce -->
+    <section class="row mb-4">
+        <div class="col-md-4">
+            <div class="card shadow-sm border-success">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-calendar-check text-success fs-1 me-3"></i>
+                        <div>
+                            <small class="text-muted d-block">Fecha Inicio</small>
+                            <h4 class="mb-0 fw-bold">
+                                <time datetime="{{ cruce.fecha_inicio|date:'Y-m-d' }}">
+                                    {{ cruce.fecha_inicio|date:"d/m/Y" }}
+                                </time>
+                            </h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-danger">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-calendar-x text-danger fs-1 me-3"></i>
+                        <div>
+                            <small class="text-muted d-block">Fecha Fin</small>
+                            <h4 class="mb-0 fw-bold">
+                                <time datetime="{{ cruce.fecha_fin|date:'Y-m-d' }}">
+                                    {{ cruce.fecha_fin|date:"d/m/Y" }}
+                                </time>
+                            </h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-primary">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-calendar-event text-primary fs-1 me-3"></i>
+                        <div>
+                            <small class="text-muted d-block">Fecha Realizado</small>
+                            <h4 class="mb-0 fw-bold">
+                                <time datetime="{{ cruce.fecha_realizado|date:'Y-m-d' }}">
+                                    {{ cruce.fecha_realizado|date:"d/m/Y" }}
+                                </time>
+                            </h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tabla de transacciones cruzadas -->
+    <section class="card shadow-sm">
+        <header class="card-header bg-primary text-white">
+            <h2 class="h5 mb-0">
+                <i class="bi bi-table me-2"></i>
+                Transacciones Cruzadas
+            </h2>
+        </header>
+        <div class="card-body p-0">
+            {% if page_obj %}
+            <div class="table-responsive">
+                <table class="table table-hover table-striped mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th scope="col">
+                                <i class="bi bi-basket me-1"></i>
+                                N° Pedido
+                            </th>
+                            <th scope="col">
+                                <i class="bi bi-calendar-event me-1"></i>
+                                Fecha y Hora
+                            </th>
+                            <th scope="col">
+                                <i class="bi bi-credit-card me-1"></i>
+                                Medio Pago
+                            </th>
+                            <th scope="col">
+                                <i class="bi bi-shop me-1"></i>
+                                Seller
+                            </th>
+                            <th scope="col" class="text-center">
+                                <i class="bi bi-cart me-1"></i>
+                                VTEX
+                            </th>
+                            <th scope="col" class="text-center">
+                                <i class="bi bi-wallet2 me-1"></i>
+                                Payway 1
+                            </th>
+                            <th scope="col" class="text-center">
+                                <i class="bi bi-wallet2 me-1"></i>
+                                Payway 2
+                            </th>
+                            <th scope="col" class="text-center">
+                                <i class="bi bi-building me-1"></i>
+                                CDP
+                            </th>
+                            <th scope="col" class="text-center">
+                                <i class="bi bi-box me-1"></i>
+                                Janis
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transaccion in page_obj %}
+                        <tr>
+                            <td class="fw-bold text-primary">{{ transaccion.numero_pedido }}</td>
+                            <td>
+                                <time datetime="{{ transaccion.fecha_hora|date:'Y-m-d\TH:i:s' }}">
+                                    <small>{{ transaccion.fecha_hora|date:"d/m/Y H:i:s" }}</small>
+                                </time>
+                            </td>
+                            <td>
+                                <span class="badge bg-info">
+                                    {{ transaccion.medio_pago|default:"-" }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary">
+                                    {{ transaccion.seller|default:"-" }}
+                                </span>
+                            </td>
+                            <td class="text-center">
+                                {% if transaccion.estado_vtex %}
+                                    {% if 'aprobad' in transaccion.estado_vtex|lower or 'complet' in transaccion.estado_vtex|lower %}
+                                        <span class="badge bg-success">{{ transaccion.estado_vtex }}</span>
+                                    {% elif 'rechaz' in transaccion.estado_vtex|lower or 'cancel' in transaccion.estado_vtex|lower %}
+                                        <span class="badge bg-danger">{{ transaccion.estado_vtex }}</span>
+                                    {% elif 'pendiente' in transaccion.estado_vtex|lower %}
+                                        <span class="badge bg-warning text-dark">{{ transaccion.estado_vtex }}</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ transaccion.estado_vtex }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-light text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if transaccion.estado_payway %}
+                                    {% if 'aprobad' in transaccion.estado_payway|lower %}
+                                        <span class="badge bg-success">{{ transaccion.estado_payway }}</span>
+                                    {% elif 'rechaz' in transaccion.estado_payway|lower %}
+                                        <span class="badge bg-danger">{{ transaccion.estado_payway }}</span>
+                                    {% elif 'pendiente' in transaccion.estado_payway|lower %}
+                                        <span class="badge bg-warning text-dark">{{ transaccion.estado_payway }}</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ transaccion.estado_payway }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-light text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if transaccion.estado_payway_2 %}
+                                    {% if 'aprobad' in transaccion.estado_payway_2|lower %}
+                                        <span class="badge bg-success">{{ transaccion.estado_payway_2 }}</span>
+                                    {% elif 'rechaz' in transaccion.estado_payway_2|lower %}
+                                        <span class="badge bg-danger">{{ transaccion.estado_payway_2 }}</span>
+                                    {% elif 'pendiente' in transaccion.estado_payway_2|lower %}
+                                        <span class="badge bg-warning text-dark">{{ transaccion.estado_payway_2 }}</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ transaccion.estado_payway_2 }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-light text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if transaccion.estado_cdp %}
+                                    {% if 'aprobad' in transaccion.estado_cdp|lower %}
+                                        <span class="badge bg-success">{{ transaccion.estado_cdp }}</span>
+                                    {% elif 'rechaz' in transaccion.estado_cdp|lower %}
+                                        <span class="badge bg-danger">{{ transaccion.estado_cdp }}</span>
+                                    {% elif 'pendiente' in transaccion.estado_cdp|lower %}
+                                        <span class="badge bg-warning text-dark">{{ transaccion.estado_cdp }}</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ transaccion.estado_cdp }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-light text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if transaccion.estado_janis %}
+                                    {% if 'aprobad' in transaccion.estado_janis|lower %}
+                                        <span class="badge bg-success">{{ transaccion.estado_janis }}</span>
+                                    {% elif 'rechaz' in transaccion.estado_janis|lower %}
+                                        <span class="badge bg-danger">{{ transaccion.estado_janis }}</span>
+                                    {% elif 'pendiente' in transaccion.estado_janis|lower %}
+                                        <span class="badge bg-warning text-dark">{{ transaccion.estado_janis }}</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ transaccion.estado_janis }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-light text-muted">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Paginación Django -->
+            {% if is_paginated %}
+            <nav aria-label="Paginación de transacciones" class="p-4">
+                <div class="d-flex justify-content-between align-items-center">
+                    <p class="text-muted mb-0">
+                        Mostrando {{ page_obj.start_index }} - {{ page_obj.end_index }} de {{ page_obj.paginator.count }} transacciones
+                    </p>
+                    <ul class="pagination mb-0">
+                        {% if page_obj.has_previous %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page=1" title="Primera página">
+                                <i class="bi bi-chevron-double-left"></i>
+                            </a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}" title="Página anterior">
+                                <i class="bi bi-chevron-left"></i>
+                            </a>
+                        </li>
+                        {% endif %}
+
+                        <li class="page-item active">
+                            <span class="page-link">
+                                Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+                            </span>
+                        </li>
+
+                        {% if page_obj.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.next_page_number }}" title="Página siguiente">
+                                <i class="bi bi-chevron-right"></i>
+                            </a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}" title="Última página">
+                                <i class="bi bi-chevron-double-right"></i>
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </nav>
+            {% endif %}
+
+            {% else %}
+            <!-- Estado vacío -->
+            <section class="text-center py-5 my-5">
+                <i class="bi bi-inbox display-1 text-muted"></i>
+                <h4 class="mt-4 text-muted">No hay transacciones en este cruce</h4>
+                <p class="text-muted">Este cruce no contiene ninguna transacción registrada</p>
+            </section>
+            {% endif %}
+        </div>
+    </section>
+</article>
+{% endblock %}

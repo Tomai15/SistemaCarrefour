@@ -263,7 +263,9 @@ class ReportePaywayService:
             self.usuario = credenciales_payway.usuario
             self.contrasena = credenciales_payway.clave
 
-
+            # Actualizar estado a PROCESANDO
+            nuevo_reporte.estado = ReportePayway.Estado.PROCESANDO
+            await sync_to_async(nuevo_reporte.save)()
 
             logger.info(f"Iniciando generación de reporte {nuevo_reporte.id} desde {fecha_inicio} hasta {fecha_fin}")
 
@@ -347,11 +349,11 @@ class ReportePaywayService:
             monto_str = str(transaccion["Monto"]).replace(',', '.')
 
             transacion_objeto = TransaccionPayway(
-                numero_transaccion=transaccion["id oper."],
+                numero_transaccion=str(transaccion["id oper."]).strip(),
                 fecha_hora=fecha_parseada,
                 monto=monto_str,
-                estado=transaccion["Estado"],
-                tarjeta=transaccion["Tarjeta"],
+                estado=str(transaccion["Estado"]).strip(),
+                tarjeta=str(transaccion["Tarjeta"]).strip(),
                 reporte=reporte
             )
             reportes_objeto.append(transacion_objeto)
