@@ -150,7 +150,22 @@ class ReporteJanis(models.Model):
     fecha_fin = models.DateField()
 
     def generar_reporter_excel(self):
-        return
+        """
+        Genera el archivo Excel del reporte y retorna la ruta completa del archivo generado.
+
+        Returns:
+            str: Ruta completa del archivo Excel generado
+        """
+        ruta_final = os.path.join(settings.MEDIA_ROOT, f'reporte_janis_{self.fecha_inicio}_to_{self.fecha_fin}.xlsx')
+        transacciones = self.transacciones.all()
+        transacciones_convertidas = list(map(lambda transaccion: transaccion.convertir_en_diccionario(), transacciones))
+        data_frame_transacciones = pd.DataFrame(transacciones_convertidas)
+        if not data_frame_transacciones.empty and 'fecha' in data_frame_transacciones.columns:
+            data_frame_transacciones['fecha'] = data_frame_transacciones['fecha'].dt.tz_localize(None)
+        data_frame_transacciones.to_excel(ruta_final, index=False)
+        return ruta_final
+
+
 class TransaccionJanis(models.Model):
     numero_pedido = models.CharField(max_length=100)
     numero_transaccion = models.CharField(max_length=100)
@@ -159,6 +174,16 @@ class TransaccionJanis(models.Model):
     seller = models.CharField(max_length=100)
     estado = models.CharField(max_length=100)
     reporte = models.ForeignKey(ReporteJanis, on_delete=models.CASCADE, related_name='transacciones')
+
+    def convertir_en_diccionario(self):
+        return {
+            'Pedido': self.numero_pedido,
+            'Transaccion': self.numero_transaccion,
+            'fecha': self.fecha_hora,
+            'medio_pago': self.medio_pago,
+            'seller': self.seller,
+            'estado': self.estado
+        }
 
 
 class Cruce(models.Model):

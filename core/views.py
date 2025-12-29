@@ -8,11 +8,12 @@ import os
 
 from django_q.tasks import async_task
 
-from core.models import ReportePayway, ReporteVtex, ReporteCDP, Cruce, UsuarioPayway, UsuarioCDP
+from core.models import ReportePayway, ReporteVtex, ReporteCDP, ReporteJanis, Cruce, UsuarioPayway, UsuarioCDP
 from core.forms import (
     GenerarReportePaywayForm,
     GenerarReporteVtexForm,
     GenerarReporteCDPForm,
+    GenerarReporteJanisForm,
     GenerarCruceForm,
     CredencialesPaywayForm,
     CredencialesCDPForm
@@ -430,6 +431,187 @@ def generar_reporte_cdp_view(request):
         form = GenerarReporteCDPForm()
 
     return render(request, 'core/CDP/generarReporte.html', {'form': form})
+
+
+# ==================== VISTAS JANIS ====================
+
+class reporteJanisListView(ListView):
+    """Vista de lista de reportes de Janis con paginación."""
+    model = ReporteJanis
+    paginate_by = 50
+    template_name = 'core/Janis/vistaReportes.html'
+    ordering = ['-id']
+
+
+class reporteJanisDetailView(SingleObjectMixin, ListView):
+    """
+    Vista de detalle de reporte Janis con paginación server-side de transacciones.
+
+    Combina SingleObjectMixin (para obtener el reporte) con ListView (para paginar transacciones).
+    Esto permite manejar eficientemente reportes con miles de transacciones.
+    """
+    template_name = 'core/Janis/detalleReporte.html'
+    paginate_by = 20  # Transacciones por página
+    context_object_name = 'transacciones'
+
+    def get(self, request, *args, **kwargs):
+        # Obtener el reporte (SingleObjectMixin)
+        self.object = self.get_object(queryset=ReporteJanis.objects.all())
+        return super().get(request, *args, **kwargs)
+
+    def get_queryset(self):
+        # Obtener transacciones del reporte actual, ordenadas por fecha descendente
+        return self.object.transacciones.all().order_by('-fecha_hora')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Agregar el reporte al contexto
+        context['reporte'] = self.object
+        return context
+
+
+def exportar_reporte_janis_excel(request, pk):
+    """Vista para exportar un reporte de Janis a Excel."""
+    reporte = get_object_or_404(ReporteJanis, pk=pk)
+
+    # El modelo es responsable de generar el archivo y retornar su ruta
+    ruta_archivo = reporte.generar_reporter_excel()
+
+    if not os.path.exists(ruta_archivo):
+        raise Http404("El archivo no se generó correctamente")
+
+    nombre_archivo = os.path.basename(ruta_archivo)
+
+    response = FileResponse(
+        open(ruta_archivo, 'rb'),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{nombre_archivo}"'
+
+    return response
+
+
+def generar_reporte_janis_view(request):
+    """
+    Vista para generar un nuevo reporte de Janis.
+
+    Muestra un formulario para ingresar fechas y encola la generación del reporte.
+    """
+    if request.method == 'POST':
+        form = GenerarReporteJanisForm(request.POST)
+
+        if form.is_valid():
+            # Obtener fechas del formulario
+            fecha_inicio = form.cleaned_data['fecha_inicio']
+            fecha_fin = form.cleaned_data['fecha_fin']
+
+            # Formatear fechas para el servicio (DD/MM/YYYY)
+            fecha_inicio_str = fecha_inicio.strftime("%d/%m/%Y")
+            fecha_fin_str = fecha_fin.strftime("%d/%m/%Y")
+
+            # Crear el reporte en estado PENDIENTE
+            nuevo_reporte = ReporteJanis.objects.create(
+                fecha_inicio=fecha_inicio,
+                fecha_fin=fecha_fin,
+                estado=ReporteJanis.Estado.PENDIENTE
+            )
+
+            # Encolar tarea en Django-Q
+            try:
+                task_id = async_task(
+                    'core.tasks.generar_reporte_janis_async',
+                    fecha_inicio_str,
+                    fecha_fin_str,
+                    nuevo_reporte.id  # Pasar solo el ID, no el objeto completo
+                )
+
+                messages.success(
+                    request,
+                    f'Reporte de Janis encolado exitosamente. Puede visualizarlo en Reportes Generados.'
+                )
+
+                return redirect('lista_reportes_janis')
+
+            except Exception as e:
+                messages.error(
+                    request,
+                    f'Error al crear el reporte de Janis: {str(e)}'
+                )
+
+    else:
+        form = GenerarReporteJanisForm()
+
+    return render(request, 'core/Janis/generarReporte.html', {'form': form})
+
+
+def importar_reporte_janis_view(request):
+    """
+    Vista para importar un reporte de Janis desde un archivo Excel.
+
+    Procesa el archivo subido y crea las transacciones en la base de datos.
+    """
+    if request.method == 'POST':
+        archivo = request.FILES.get('archivo_excel')
+        fecha_inicio_str = request.POST.get('fecha_inicio')
+        fecha_fin_str = request.POST.get('fecha_fin')
+
+        # Validaciones básicas
+        if not archivo:
+            messages.error(request, 'Debe seleccionar un archivo Excel.')
+            return redirect('generar_reporte_janis')
+
+        if not fecha_inicio_str or not fecha_fin_str:
+            messages.error(request, 'Debe ingresar las fechas de inicio y fin.')
+            return redirect('generar_reporte_janis')
+
+        # Validar extensión del archivo
+        if not archivo.name.endswith(('.xlsx', '.xls')):
+            messages.error(request, 'El archivo debe ser un Excel (.xlsx o .xls).')
+            return redirect('generar_reporte_janis')
+
+        try:
+            # Parsear fechas
+            from datetime import datetime
+            fecha_inicio = datetime.strptime(fecha_inicio_str, '%Y-%m-%d').date()
+            fecha_fin = datetime.strptime(fecha_fin_str, '%Y-%m-%d').date()
+
+            # Validar que fecha_inicio <= fecha_fin
+            if fecha_inicio > fecha_fin:
+                messages.error(request, 'La fecha de inicio no puede ser posterior a la fecha de fin.')
+                return redirect('generar_reporte_janis')
+
+            # Crear el reporte
+            nuevo_reporte = ReporteJanis.objects.create(
+                fecha_inicio=fecha_inicio,
+                fecha_fin=fecha_fin,
+                estado=ReporteJanis.Estado.PROCESANDO
+            )
+
+            # Importar usando el servicio
+            from core.services.ReporteJanisService import ReporteJanisService
+            servicio = ReporteJanisService()
+            cantidad = servicio.importar_desde_excel(archivo, nuevo_reporte)
+
+            # Actualizar estado a COMPLETADO
+            nuevo_reporte.estado = ReporteJanis.Estado.COMPLETADO
+            nuevo_reporte.save()
+
+            messages.success(
+                request,
+                f'Reporte importado exitosamente. {cantidad} transacciones procesadas.'
+            )
+            return redirect('lista_reportes_janis')
+
+        except Exception as e:
+            messages.error(request, f'Error al importar el archivo: {str(e)}')
+            # Si se creó el reporte, marcarlo como error
+            if 'nuevo_reporte' in locals():
+                nuevo_reporte.estado = ReporteJanis.Estado.ERROR
+                nuevo_reporte.save()
+            return redirect('generar_reporte_janis')
+
+    # Si es GET, redirigir al formulario
+    return redirect('generar_reporte_janis')
 
 
 # ==================== VISTAS CRUCES ====================

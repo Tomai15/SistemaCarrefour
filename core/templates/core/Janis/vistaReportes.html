@@ -1,0 +1,178 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Reportes Janis{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <!-- Header con botón volver -->
+    <header class="row mb-4">
+        <div class="col-12 mb-3">
+            <a href="{% url 'home' %}" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left me-2"></i>
+                Volver al inicio
+            </a>
+        </div>
+        <div class="col-md-8">
+            <h1 class="display-5 fw-bold text-primary">
+                <i class="bi bi-file-earmark-text me-2"></i>
+                Reportes Generados Janis
+            </h1>
+            <p class="text-muted">Visualiza y gestiona todos tus reportes de Janis</p>
+        </div>
+        <div class="col-md-4 text-end d-flex align-items-center justify-content-end gap-2">
+            <button onclick="location.reload()" class="btn btn-outline-secondary btn-lg shadow-sm" title="Recargar página">
+                <i class="bi bi-arrow-clockwise me-2"></i>
+                Recargar
+            </button>
+            <a href="{% url 'generar_reporte_janis' %}" class="btn btn-primary btn-lg shadow">
+                <i class="bi bi-plus-circle me-2"></i>
+                Nuevo Reporte
+            </a>
+        </div>
+    </header>
+
+    {% if object_list %}
+        <!-- Grid de reportes -->
+        <section class="row g-4">
+            {% for reporte in object_list %}
+            <div class="col-md-6 col-lg-4">
+                <article>
+                    <a href="{% url 'detalle_reporte_janis' reporte.id %}" class="text-decoration-none">
+                        <div class="card h-100 shadow-sm border-2" style="cursor: pointer;">
+                            <div class="card-body">
+                                <!-- ID del Reporte -->
+                                <header class="text-center mb-3">
+                                    <span class="badge bg-primary fs-6 mb-2">REPORTE</span>
+                                    <div class="display-4 fw-bold text-primary">#{{ reporte.id }}</div>
+
+                                    <!-- Estado del Reporte -->
+                                    <div class="mt-2">
+                                        {% if reporte.estado == 'PENDIENTE' %}
+                                            <span class="badge bg-warning text-dark fs-6">
+                                                <i class="bi bi-clock-history me-1"></i>
+                                                Pendiente
+                                            </span>
+                                        {% elif reporte.estado == 'PROCESANDO' %}
+                                            <span class="badge bg-info text-dark fs-6">
+                                                <i class="bi bi-hourglass-split me-1"></i>
+                                                Procesando
+                                            </span>
+                                        {% elif reporte.estado == 'COMPLETADO' %}
+                                            <span class="badge bg-success fs-6">
+                                                <i class="bi bi-check-circle me-1"></i>
+                                                Completado
+                                            </span>
+                                        {% elif reporte.estado == 'ERROR' %}
+                                            <span class="badge bg-danger fs-6">
+                                                <i class="bi bi-exclamation-triangle me-1"></i>
+                                                Error
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-secondary fs-6">
+                                                <i class="bi bi-question-circle me-1"></i>
+                                                {{ reporte.estado }}
+                                            </span>
+                                        {% endif %}
+                                    </div>
+                                </header>
+
+                                <hr>
+
+                                <!-- Fecha de Inicio -->
+                                <div class="bg-light rounded p-2 mb-3">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-calendar-check text-success fs-4 me-2"></i>
+                                        <div>
+                                            <small class="text-muted d-block">Fecha Inicio</small>
+                                            <strong>
+                                                <time datetime="{{ reporte.fecha_inicio|date:'Y-m-d' }}">
+                                                    {{ reporte.fecha_inicio|date:"d/m/Y" }}
+                                                </time>
+                                            </strong>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Fecha de Fin -->
+                                <div class="bg-light rounded p-2">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-calendar-x text-danger fs-4 me-2"></i>
+                                        <div>
+                                            <small class="text-muted d-block">Fecha Fin</small>
+                                            <strong>
+                                                <time datetime="{{ reporte.fecha_fin|date:'Y-m-d' }}">
+                                                    {{ reporte.fecha_fin|date:"d/m/Y" }}
+                                                </time>
+                                            </strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Footer de la card -->
+                            <footer class="card-footer bg-light text-center">
+                                <small class="text-primary fw-bold">
+                                    <i class="bi bi-hand-index me-1"></i>
+                                    Click para ver detalles
+                                </small>
+                            </footer>
+                        </div>
+                    </a>
+                </article>
+            </div>
+            {% endfor %}
+        </section>
+
+        <!-- Paginación si existe -->
+        {% if is_paginated %}
+        <nav aria-label="Paginación de reportes" class="mt-5">
+            <ul class="pagination justify-content-center">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page=1">
+                        <i class="bi bi-chevron-double-left"></i>
+                    </a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                </li>
+                {% endif %}
+
+                <li class="page-item active">
+                    <span class="page-link">
+                        Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+                    </span>
+                </li>
+
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">
+                        <i class="bi bi-chevron-double-right"></i>
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+
+    {% else %}
+        <!-- Estado vacío -->
+        <section class="text-center py-5 my-5">
+            <i class="bi bi-inbox display-1 text-muted"></i>
+            <h3 class="mt-4 text-muted">No hay reportes generados</h3>
+            <p class="lead text-muted mb-4">Comienza creando tu primer reporte</p>
+            <a href="{% url 'generar_reporte_janis' %}" class="btn btn-primary btn-lg px-5 shadow">
+                <i class="bi bi-plus-circle me-2"></i>
+                Crear Primer Reporte
+            </a>
+        </section>
+    {% endif %}
+</div>
+{% endblock %}

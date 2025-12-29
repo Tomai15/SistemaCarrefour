@@ -1,0 +1,304 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Generar Reporte Janis{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <!-- Header con botón volver -->
+    <header class="row mb-4">
+        <div class="col-12 mb-3">
+            <a href="{% url 'lista_reportes_janis' %}" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left me-2"></i>
+                Volver a Reportes
+            </a>
+        </div>
+        <div class="col-12">
+            <h1 class="display-5 fw-bold text-primary">
+                <i class="bi bi-plus-circle me-2"></i>
+                Generar Nuevo Reporte Janis
+            </h1>
+            <p class="text-muted">Importe un archivo Excel o genere un reporte por rango de fechas</p>
+        </div>
+    </header>
+
+    <!-- Mensajes de Django -->
+    {% if messages %}
+        <div class="row mb-4">
+            <div class="col-12">
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                        {% if message.tags == 'error' %}
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        {% elif message.tags == 'success' %}
+                            <i class="bi bi-check-circle-fill me-2"></i>
+                        {% elif message.tags == 'warning' %}
+                            <i class="bi bi-exclamation-circle-fill me-2"></i>
+                        {% else %}
+                            <i class="bi bi-info-circle-fill me-2"></i>
+                        {% endif %}
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    {% endif %}
+
+    <!-- Tabs para elegir método -->
+    <div class="row">
+        <div class="col-lg-8">
+            <ul class="nav nav-tabs nav-fill mb-0" id="metodoTab" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="importar-tab" data-bs-toggle="tab" data-bs-target="#importar" type="button" role="tab" aria-controls="importar" aria-selected="true">
+                        <i class="bi bi-file-earmark-excel me-2"></i>
+                        Importar desde Excel
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="generar-tab" data-bs-toggle="tab" data-bs-target="#generar" type="button" role="tab" aria-controls="generar" aria-selected="false">
+                        <i class="bi bi-calendar-range me-2"></i>
+                        Generar por Fechas
+                        <span class="badge bg-warning text-dark ms-2">Próximamente</span>
+                    </button>
+                </li>
+            </ul>
+
+            <div class="tab-content" id="metodoTabContent">
+                <!-- Tab Importar Excel -->
+                <div class="tab-pane fade show active" id="importar" role="tabpanel" aria-labelledby="importar-tab">
+                    <div class="card shadow-sm border-2 border-top-0 rounded-top-0">
+                        <div class="card-header bg-success text-white">
+                            <h5 class="mb-0">
+                                <i class="bi bi-upload me-2"></i>
+                                Importar archivo Excel
+                            </h5>
+                        </div>
+                        <div class="card-body p-4">
+                            <form method="post" action="{% url 'importar_reporte_janis' %}" enctype="multipart/form-data" novalidate>
+                                {% csrf_token %}
+
+                                <!-- Campo de archivo -->
+                                <div class="mb-4">
+                                    <label for="archivo_excel" class="form-label fs-5 fw-bold">
+                                        <i class="bi bi-file-earmark-spreadsheet text-success me-2"></i>
+                                        Archivo Excel
+                                    </label>
+                                    <input type="file"
+                                           class="form-control form-control-lg"
+                                           id="archivo_excel"
+                                           name="archivo_excel"
+                                           accept=".xlsx,.xls"
+                                           required>
+                                    <div class="form-text">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        Seleccione un archivo Excel (.xlsx o .xls) con las transacciones
+                                    </div>
+                                </div>
+
+                                <!-- Fecha inicio para el reporte -->
+                                <div class="row">
+                                    <div class="col-md-6 mb-4">
+                                        <label for="fecha_inicio_import" class="form-label fs-5 fw-bold">
+                                            <i class="bi bi-calendar-check text-success me-2"></i>
+                                            Fecha de Inicio
+                                        </label>
+                                        <input type="date"
+                                               class="form-control form-control-lg"
+                                               id="fecha_inicio_import"
+                                               name="fecha_inicio"
+                                               required>
+                                        <div class="form-text">
+                                            <i class="bi bi-info-circle me-1"></i>
+                                            Fecha de inicio del período del reporte
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6 mb-4">
+                                        <label for="fecha_fin_import" class="form-label fs-5 fw-bold">
+                                            <i class="bi bi-calendar-x text-danger me-2"></i>
+                                            Fecha de Fin
+                                        </label>
+                                        <input type="date"
+                                               class="form-control form-control-lg"
+                                               id="fecha_fin_import"
+                                               name="fecha_fin"
+                                               required>
+                                        <div class="form-text">
+                                            <i class="bi bi-info-circle me-1"></i>
+                                            Fecha de fin del período del reporte
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <hr class="my-4">
+
+                                <!-- Botones de acción -->
+                                <div class="d-flex gap-3">
+                                    <button type="submit" class="btn btn-success btn-lg px-5 shadow">
+                                        <i class="bi bi-upload me-2"></i>
+                                        Importar Reporte
+                                    </button>
+                                    <a href="{% url 'lista_reportes_janis' %}" class="btn btn-outline-secondary btn-lg px-4">
+                                        <i class="bi bi-x-circle me-2"></i>
+                                        Cancelar
+                                    </a>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab Generar por Fechas -->
+                <div class="tab-pane fade" id="generar" role="tabpanel" aria-labelledby="generar-tab">
+                    <div class="card shadow-sm border-2 border-top-0 rounded-top-0">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">
+                                <i class="bi bi-calendar-range me-2"></i>
+                                Seleccione el rango de fechas
+                            </h5>
+                        </div>
+                        <div class="card-body p-4">
+                            <div class="alert alert-warning" role="alert">
+                                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                <strong>Funcionalidad en desarrollo:</strong> La generación automática por API estará disponible próximamente.
+                                Por ahora, utilice la opción de importar Excel.
+                            </div>
+
+                            <form method="post" novalidate>
+                                {% csrf_token %}
+
+                                <!-- Errores generales del formulario -->
+                                {% if form.non_field_errors %}
+                                    <div class="alert alert-danger" role="alert">
+                                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                        {{ form.non_field_errors }}
+                                    </div>
+                                {% endif %}
+
+                                <!-- Fecha de Inicio -->
+                                <div class="mb-4">
+                                    <label for="{{ form.fecha_inicio.id_for_label }}" class="form-label fs-5 fw-bold">
+                                        <i class="bi bi-calendar-check text-success me-2"></i>
+                                        {{ form.fecha_inicio.label }}
+                                    </label>
+                                    {{ form.fecha_inicio }}
+                                    {% if form.fecha_inicio.help_text %}
+                                        <div class="form-text">
+                                            <i class="bi bi-info-circle me-1"></i>
+                                            {{ form.fecha_inicio.help_text }}
+                                        </div>
+                                    {% endif %}
+                                    {% if form.fecha_inicio.errors %}
+                                        <div class="invalid-feedback d-block">
+                                            <i class="bi bi-exclamation-circle me-1"></i>
+                                            {{ form.fecha_inicio.errors.0 }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+
+                                <!-- Fecha de Fin -->
+                                <div class="mb-4">
+                                    <label for="{{ form.fecha_fin.id_for_label }}" class="form-label fs-5 fw-bold">
+                                        <i class="bi bi-calendar-x text-danger me-2"></i>
+                                        {{ form.fecha_fin.label }}
+                                    </label>
+                                    {{ form.fecha_fin }}
+                                    {% if form.fecha_fin.help_text %}
+                                        <div class="form-text">
+                                            <i class="bi bi-info-circle me-1"></i>
+                                            {{ form.fecha_fin.help_text }}
+                                        </div>
+                                    {% endif %}
+                                    {% if form.fecha_fin.errors %}
+                                        <div class="invalid-feedback d-block">
+                                            <i class="bi bi-exclamation-circle me-1"></i>
+                                            {{ form.fecha_fin.errors.0 }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+
+                                <hr class="my-4">
+
+                                <!-- Botones de acción (deshabilitados) -->
+                                <div class="d-flex gap-3">
+                                    <button type="submit" class="btn btn-primary btn-lg px-5 shadow" disabled>
+                                        <i class="bi bi-play-circle me-2"></i>
+                                        Generar Reporte
+                                    </button>
+                                    <a href="{% url 'lista_reportes_janis' %}" class="btn btn-outline-secondary btn-lg px-4">
+                                        <i class="bi bi-x-circle me-2"></i>
+                                        Cancelar
+                                    </a>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna lateral con información adicional -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 bg-light">
+                <div class="card-body">
+                    <h6 class="fw-bold mb-3">
+                        <i class="bi bi-file-earmark-excel text-success me-2"></i>
+                        Formato del Excel
+                    </h6>
+                    <p class="small text-muted mb-2">
+                        El archivo debe contener las siguientes columnas:
+                    </p>
+                    <ul class="small text-muted mb-0">
+                        <li><code>numero_pedido</code></li>
+                        <li><code>numero_transaccion</code></li>
+                        <li><code>fecha_hora</code></li>
+                        <li><code>medio_pago</code></li>
+                        <li><code>seller</code></li>
+                        <li><code>estado</code></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 bg-light mt-3">
+                <div class="card-body">
+                    <h6 class="fw-bold mb-3">
+                        <i class="bi bi-lightbulb text-warning me-2"></i>
+                        Información importante
+                    </h6>
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-3">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            <small>Formatos soportados: .xlsx y .xls</small>
+                        </li>
+                        <li class="mb-3">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            <small>Las fechas deben estar en formato válido</small>
+                        </li>
+                        <li class="mb-0">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            <small>El procesamiento es inmediato</small>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 bg-light mt-3">
+                <div class="card-body">
+                    <h6 class="fw-bold mb-3">
+                        <i class="bi bi-question-circle text-primary me-2"></i>
+                        ¿Necesita ayuda?
+                    </h6>
+                    <p class="small text-muted mb-0">
+                        Si tiene problemas importando el archivo, verifique que:
+                    </p>
+                    <ul class="small text-muted mt-2 mb-0">
+                        <li>El archivo tenga las columnas correctas</li>
+                        <li>Los datos estén en el formato esperado</li>
+                        <li>No haya filas vacías al inicio</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

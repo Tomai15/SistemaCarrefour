@@ -7,7 +7,13 @@ from core.models import (
     ReporteVtex,
     UsuarioPayway,
     UsuarioCDP,
-    UsuarioVtex, TransaccionCDP, ReporteCDP, Cruce, TransaccionCruce
+    UsuarioVtex,
+    TransaccionCDP,
+    ReporteCDP,
+    Cruce,
+    TransaccionCruce,
+    ReporteJanis,
+    TransaccionJanis,
 )
 
 # Register your models here.
@@ -24,6 +30,10 @@ admin.site.register(ReporteCDP)
 
 admin.site.register(Cruce)
 admin.site.register(TransaccionCruce)
+
+# Janis
+admin.site.register(TransaccionJanis)
+admin.site.register(ReporteJanis)
 
 # Credenciales
 admin.site.register(UsuarioPayway)
