@@ -681,6 +681,7 @@ def generar_cruce_view(request):
             reporte_vtex = form.cleaned_data.get('reporte_vtex')
             reporte_payway = form.cleaned_data.get('reporte_payway')
             reporte_cdp = form.cleaned_data.get('reporte_cdp')
+            reporte_janis = form.cleaned_data.get('reporte_janis')
 
             # Determinar fecha_inicio y fecha_fin basándose en los reportes seleccionados
             fechas_inicio = []
@@ -695,16 +696,23 @@ def generar_cruce_view(request):
             if reporte_cdp:
                 fechas_inicio.append(reporte_cdp.fecha_inicio)
                 fechas_fin.append(reporte_cdp.fecha_fin)
+            if reporte_janis:
+                fechas_inicio.append(reporte_janis.fecha_inicio)
+                fechas_fin.append(reporte_janis.fecha_fin)
 
             # Usar la fecha más temprana como inicio y la más tardía como fin
             fecha_inicio = min(fechas_inicio)
             fecha_fin = max(fechas_fin)
 
-            # Crear el cruce en estado PENDIENTE
+            # Crear el cruce en estado PENDIENTE con referencias a los reportes
             nuevo_cruce = Cruce.objects.create(
                 fecha_inicio=fecha_inicio,
                 fecha_fin=fecha_fin,
-                estado=Cruce.Estado.PENDIENTE
+                estado=Cruce.Estado.PENDIENTE,
+                reporte_vtex=reporte_vtex,
+                reporte_payway=reporte_payway,
+                reporte_cdp=reporte_cdp,
+                reporte_janis=reporte_janis
             )
 
             # Encolar tarea en Django-Q
@@ -714,7 +722,8 @@ def generar_cruce_view(request):
                     nuevo_cruce.id,
                     reporte_vtex.id if reporte_vtex else None,
                     reporte_payway.id if reporte_payway else None,
-                    reporte_cdp.id if reporte_cdp else None
+                    reporte_cdp.id if reporte_cdp else None,
+                    reporte_janis.id if reporte_janis else None
                 )
 
                 messages.success(

@@ -1,7 +1,7 @@
 from django import forms
 from django.core.exceptions import ValidationError
 from datetime import date
-from core.models import UsuarioPayway, UsuarioCDP, ReporteVtex, ReportePayway, ReporteCDP
+from core.models import UsuarioPayway, UsuarioCDP, ReporteVtex, ReportePayway, ReporteCDP, ReporteJanis
 
 
 class RangoFechasFormMixin:
@@ -311,12 +311,22 @@ class GenerarCruceForm(forms.Form):
         })
     )
 
+    reporte_janis = forms.ModelChoiceField(
+        queryset=ReporteJanis.objects.filter(estado='COMPLETADO').order_by('-id'),
+        required=False,
+        empty_label="-- Ninguno --",
+        widget=forms.Select(attrs={
+            'class': 'form-control form-control-lg'
+        })
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Personalizar las etiquetas de los reportes para mostrar más información
         self.fields['reporte_vtex'].label_from_instance = lambda obj: f"#{obj.id} - {obj.fecha_inicio} a {obj.fecha_fin}"
         self.fields['reporte_payway'].label_from_instance = lambda obj: f"#{obj.id} - {obj.fecha_inicio} a {obj.fecha_fin}"
         self.fields['reporte_cdp'].label_from_instance = lambda obj: f"#{obj.id} - {obj.fecha_inicio} a {obj.fecha_fin}"
+        self.fields['reporte_janis'].label_from_instance = lambda obj: f"#{obj.id} - {obj.fecha_inicio} a {obj.fecha_fin}"
 
     def clean(self):
         """Validar que se seleccionen al menos 2 reportes de diferentes tipos."""
@@ -325,12 +335,14 @@ class GenerarCruceForm(forms.Form):
         reporte_vtex = cleaned_data.get('reporte_vtex')
         reporte_payway = cleaned_data.get('reporte_payway')
         reporte_cdp = cleaned_data.get('reporte_cdp')
+        reporte_janis = cleaned_data.get('reporte_janis')
 
         # Contar cuántos reportes se seleccionaron
         reportes_seleccionados = sum([
             1 if reporte_vtex else 0,
             1 if reporte_payway else 0,
             1 if reporte_cdp else 0,
+            1 if reporte_janis else 0,
         ])
 
         if reportes_seleccionados < 2:

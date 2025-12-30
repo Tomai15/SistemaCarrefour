@@ -3,8 +3,8 @@ from datetime import date
 
 from core.models import (
     Cruce, TransaccionCruce,
-    ReporteVtex, ReportePayway, ReporteCDP,
-    TransaccionVtex, TransaccionPayway, TransaccionCDP
+    ReporteVtex, ReportePayway, ReporteCDP, ReporteJanis,
+    TransaccionVtex, TransaccionPayway, TransaccionCDP, TransaccionJanis
 )
 
 from django.conf import settings
@@ -21,7 +21,7 @@ class CruceService:
         """Inicializa el servicio de cruces."""
         pass
 
-    async def generar_cruce(self, cruce_id, reporte_vtex_id=None, reporte_payway_id=None, reporte_cdp_id=None):
+    async def generar_cruce(self, cruce_id, reporte_vtex_id=None, reporte_payway_id=None, reporte_cdp_id=None, reporte_janis_id=None):
         """
         Genera un cruce de transacciones entre los reportes seleccionados.
 
@@ -30,6 +30,7 @@ class CruceService:
             reporte_vtex_id: ID del reporte VTEX (opcional)
             reporte_payway_id: ID del reporte Payway (opcional)
             reporte_cdp_id: ID del reporte CDP (opcional)
+            reporte_janis_id: ID del reporte Janis (opcional)
 
         Returns:
             bool: True si se genero exitosamente, False en caso contrario
@@ -48,6 +49,7 @@ class CruceService:
             reporte_vtex = None
             reporte_payway = None
             reporte_cdp = None
+            reporte_janis = None
 
             if reporte_vtex_id:
                 reporte_vtex = await sync_to_async(ReporteVtex.objects.get)(id=reporte_vtex_id)
@@ -55,11 +57,14 @@ class CruceService:
                 reporte_payway = await sync_to_async(ReportePayway.objects.get)(id=reporte_payway_id)
             if reporte_cdp_id:
                 reporte_cdp = await sync_to_async(ReporteCDP.objects.get)(id=reporte_cdp_id)
+            if reporte_janis_id:
+                reporte_janis = await sync_to_async(ReporteJanis.objects.get)(id=reporte_janis_id)
 
             # Obtener las transacciones de cada reporte
             transacciones_vtex = []
             transacciones_payway = []
             transacciones_cdp = []
+            transacciones_janis = []
 
             if reporte_vtex:
                 transacciones_vtex = await sync_to_async(list)(
@@ -73,10 +78,15 @@ class CruceService:
                 transacciones_cdp = await sync_to_async(list)(
                     reporte_cdp.transacciones.all()
                 )
+            if reporte_janis:
+                transacciones_janis = await sync_to_async(list)(
+                    reporte_janis.transacciones.all()
+                )
 
             logger.info(
                 f"Transacciones obtenidas - VTEX: {len(transacciones_vtex)}, "
-                f"Payway: {len(transacciones_payway)}, CDP: {len(transacciones_cdp)}"
+                f"Payway: {len(transacciones_payway)}, CDP: {len(transacciones_cdp)}, "
+                f"Janis: {len(transacciones_janis)}"
             )
 
 
@@ -85,7 +95,8 @@ class CruceService:
             transacciones_cruzadas = await self.cruzar_transacciones(
                 transacciones_vtex,
                 transacciones_payway,
-                transacciones_cdp
+                transacciones_cdp,
+                transacciones_janis
             )
 
             # Guardar transacciones cruzadas en la base de datos
@@ -114,7 +125,7 @@ class CruceService:
                 pass
             return False
 
-    async def cruzar_transacciones(self, transacciones_vtex, transacciones_payway, transacciones_cdp):
+    async def cruzar_transacciones(self, transacciones_vtex, transacciones_payway, transacciones_cdp, transacciones_janis):
         """
         Cruza las transacciones de los diferentes sistemas.
 
@@ -122,6 +133,7 @@ class CruceService:
             transacciones_vtex: Lista de TransaccionVtex
             transacciones_payway: Lista de TransaccionPayway
             transacciones_cdp: Lista de TransaccionCDP
+            transacciones_janis: Lista de TransaccionJanis
         Returns:
             list: Lista de diccionarios con las transacciones cruzadas.
                   Cada diccionario debe tener las keys:
@@ -139,6 +151,9 @@ class CruceService:
         vtex_por_pedido = {t.numero_pedido: t for t in transacciones_vtex}
         cdp_por_pedido = {t.numero_pedido: t for t in transacciones_cdp}
         payway_por_transaccion = {t.numero_transaccion: t for t in transacciones_payway}
+
+        # Ejemplo: indexar por numero_pedido
+        janis_por_pedido = {t.numero_pedido: t for t in transacciones_janis}
 
         # DEBUG: Mostrar ejemplos de claves para cada diccionario
         logger.info("=" * 60)
@@ -160,6 +175,11 @@ class CruceService:
         logger.info(f"PAYWAY - Total transacciones: {len(payway_por_transaccion)}")
         logger.info(f"PAYWAY - Ejemplo claves (numero_transaccion): {payway_keys}")
 
+        # Mostrar primeras 5 claves de Janis
+        janis_keys = list(janis_por_pedido.keys())[:5]
+        logger.info(f"JANIS - Total pedidos: {len(janis_por_pedido)}")
+        logger.info(f"JANIS - Ejemplo claves (numero_pedido): {janis_keys}")
+
         # Mostrar ejemplo de numero_transaccion de VTEX para comparar
         if transacciones_vtex:
             vtex_transacciones = [t.numero_transaccion for t in transacciones_vtex[:5]]
@@ -172,11 +192,12 @@ class CruceService:
         transacciones_cruzadas = []
         matches_payway = 0
         matches_cdp = 0
+        matches_janis = 0
 
         for pedido in todos_los_pedidos:
             vtex = vtex_por_pedido.get(pedido)
             cdp = cdp_por_pedido.get(pedido.split('-')[0])
-
+            janis = janis_por_pedido.get(pedido)
             # Intentar match con Payway (buscar -1 y -2)
             payway = None
             payway2 = None
@@ -198,6 +219,10 @@ class CruceService:
             if cdp:
                 matches_cdp += 1
 
+
+            if janis:
+                matches_janis += 1
+
             transacciones_cruzadas.append({
                 'numero_pedido': pedido,
                 'fecha_hora': vtex.fecha_hora if vtex else None,
@@ -207,7 +232,7 @@ class CruceService:
                 'estado_payway': payway.estado if payway else 'N/A',
                 'estado_payway_2': payway2.estado if payway2 else 'N/A',
                 'estado_cdp': cdp.estado if cdp else 'N/A',
-                'estado_janis': ''
+                'estado_janis': janis.estado if janis else 'N/A'
             })
 
         # DEBUG: Resumen de matches
@@ -217,6 +242,7 @@ class CruceService:
         logger.info(f"Total transacciones cruzadas: {len(transacciones_cruzadas)}")
         logger.info(f"Matches con Payway: {matches_payway} ({100*matches_payway/len(transacciones_cruzadas) if transacciones_cruzadas else 0:.1f}%)")
         logger.info(f"Matches con CDP: {matches_cdp} ({100*matches_cdp/len(transacciones_cruzadas) if transacciones_cruzadas else 0:.1f}%)")
+        logger.info(f"Matches con Janis: {matches_janis} ({100*matches_janis/len(transacciones_cruzadas) if transacciones_cruzadas else 0:.1f}%)")
 
         # DEBUG: Mostrar ejemplo de conversión de pedido a transacción payway
         if vtex_keys:

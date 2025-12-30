@@ -202,20 +202,91 @@ class Cruce(models.Model):
     fecha_fin = models.DateField()
     fecha_realizado = models.DateField(null=True, blank=True)
 
+    # Referencias a los reportes usados en el cruce
+    reporte_vtex = models.ForeignKey(
+        'ReporteVtex', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='cruces', verbose_name='Reporte VTEX'
+    )
+    reporte_payway = models.ForeignKey(
+        'ReportePayway', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='cruces', verbose_name='Reporte Payway'
+    )
+    reporte_cdp = models.ForeignKey(
+        'ReporteCDP', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='cruces', verbose_name='Reporte CDP'
+    )
+    reporte_janis = models.ForeignKey(
+        'ReporteJanis', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='cruces', verbose_name='Reporte Janis'
+    )
+
     def generar_reporter_excel(self):
         """
-        Genera el archivo Excel del cruce y retorna la ruta completa del archivo generado.
+        Genera el archivo Excel del cruce con múltiples hojas:
+        - Cruce: Resultado del cruce de transacciones
+        - VTEX: Reporte VTEX completo (si existe)
+        - Payway: Reporte Payway completo (si existe)
+        - CDP: Reporte CDP completo (si existe)
+        - Janis: Reporte Janis completo (si existe)
 
         Returns:
             str: Ruta completa del archivo Excel generado
         """
         ruta_final = os.path.join(settings.MEDIA_ROOT, f'cruce_{self.fecha_inicio}_to_{self.fecha_fin}.xlsx')
-        transacciones = self.transacciones.all()
-        transacciones_convertidas = list(map(lambda t: t.convertir_en_diccionario(), transacciones))
-        data_frame_transacciones = pd.DataFrame(transacciones_convertidas)
-        if not data_frame_transacciones.empty and 'fecha' in data_frame_transacciones.columns:
-            data_frame_transacciones['fecha'] = data_frame_transacciones['fecha'].dt.tz_localize(None)
-        data_frame_transacciones.to_excel(ruta_final, index=False)
+
+        with pd.ExcelWriter(ruta_final, engine='openpyxl') as writer:
+            # Hoja principal: Cruce
+            transacciones = self.transacciones.all()
+            transacciones_convertidas = list(map(lambda t: t.convertir_en_diccionario(), transacciones))
+            df_cruce = pd.DataFrame(transacciones_convertidas)
+            if not df_cruce.empty and 'fecha' in df_cruce.columns:
+                df_cruce['fecha'] = df_cruce['fecha'].dt.tz_localize(None)
+            df_cruce.to_excel(writer, sheet_name='Cruce', index=False)
+            """
+            # Hoja VTEX (si existe)
+            if self.reporte_vtex:
+                transacciones_vtex = list(map(
+                    lambda t: t.convertir_en_diccionario(),
+                    self.reporte_vtex.transacciones.all()
+                ))
+                df_vtex = pd.DataFrame(transacciones_vtex)
+                if not df_vtex.empty and 'fecha' in df_vtex.columns:
+                    df_vtex['fecha'] = df_vtex['fecha'].dt.tz_localize(None)
+                df_vtex.to_excel(writer, sheet_name='VTEX', index=False)
+
+            # Hoja Payway (si existe)
+            if self.reporte_payway:
+                transacciones_payway = list(map(
+                    lambda t: t.convertir_en_diccionario(),
+                    self.reporte_payway.transacciones.all()
+                ))
+                df_payway = pd.DataFrame(transacciones_payway)
+                if not df_payway.empty and 'fecha' in df_payway.columns:
+                    df_payway['fecha'] = df_payway['fecha'].dt.tz_localize(None)
+                df_payway.to_excel(writer, sheet_name='Payway', index=False)
+
+            # Hoja CDP (si existe)
+            if self.reporte_cdp:
+                transacciones_cdp = list(map(
+                    lambda t: t.convertir_en_diccionario(),
+                    self.reporte_cdp.transacciones.all()
+                ))
+                df_cdp = pd.DataFrame(transacciones_cdp)
+                if not df_cdp.empty and 'fecha' in df_cdp.columns:
+                    df_cdp['fecha'] = df_cdp['fecha'].dt.tz_localize(None)
+                df_cdp.to_excel(writer, sheet_name='CDP', index=False)
+
+            # Hoja Janis (si existe)
+            if self.reporte_janis:
+                transacciones_janis = list(map(
+                    lambda t: t.convertir_en_diccionario(),
+                    self.reporte_janis.transacciones.all()
+                ))
+                df_janis = pd.DataFrame(transacciones_janis)
+                if not df_janis.empty and 'fecha' in df_janis.columns:
+                    df_janis['fecha'] = df_janis['fecha'].dt.tz_localize(None)
+                df_janis.to_excel(writer, sheet_name='Janis', index=False)
+            """
         return ruta_final
 
 

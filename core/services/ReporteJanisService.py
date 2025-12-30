@@ -252,9 +252,23 @@ class ReporteJanisService:
                     if pd.isna(fecha_hora):
                         fecha_hora = datetime.now()
 
+                    # Convertir números a string sin decimales
+                    # (pandas lee números de Excel como float: 12345 -> 12345.0)
+                    numero_pedido = row.get('commerceId', '')
+                    if pd.notna(numero_pedido):
+                        if isinstance(numero_pedido, float) and numero_pedido.is_integer():
+                            numero_pedido = int(numero_pedido)
+                    numero_pedido = str(numero_pedido).strip()
+
+                    numero_transaccion = row.get('commerceSequentialId', '')
+                    if pd.notna(numero_transaccion):
+                        if isinstance(numero_transaccion, float) and numero_transaccion.is_integer():
+                            numero_transaccion = int(numero_transaccion)
+                    numero_transaccion = str(numero_transaccion).strip()
+
                     transaccion = TransaccionJanis(
-                        numero_pedido=str(row.get('commerceId', '')).strip(),
-                        numero_transaccion=str(row.get('commerceSequentialId', '')).strip(),
+                        numero_pedido=numero_pedido,
+                        numero_transaccion=numero_transaccion,
                         fecha_hora=fecha_hora,
                         medio_pago=str(row.get('paymentSystemName', 'N/A')).strip(),
                         seller=str(row.get('shippingWarehouseName', 'No encontrado')).strip(),

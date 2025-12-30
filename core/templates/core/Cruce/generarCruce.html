@@ -57,7 +57,7 @@
                         </h6>
                         <ul class="mb-0">
                             <li>Seleccione <strong>al menos 2 reportes</strong> de diferentes tipos</li>
-                            <li>Solo puede seleccionar <strong>1 reporte por tipo</strong> (VTEX, Payway, CDP)</li>
+                            <li>Solo puede seleccionar <strong>1 reporte por tipo</strong> (VTEX, Payway, CDP, Janis)</li>
                             <li>Los reportes deben estar en estado <strong>COMPLETADO</strong></li>
                             <li>El cruce se procesará de forma asíncrona</li>
                         </ul>
@@ -81,7 +81,7 @@
 
         <div class="row">
             <!-- Reportes VTEX -->
-            <div class="col-md-6 col-lg-4 mb-4">
+            <div class="col-md-6 col-lg-3 mb-4">
                 <div class="card shadow-sm h-100">
                     <div class="card-header bg-success text-white">
                         <h5 class="mb-0">
@@ -109,7 +109,7 @@
             </div>
 
             <!-- Reportes Payway -->
-            <div class="col-md-6 col-lg-4 mb-4">
+            <div class="col-md-6 col-lg-3 mb-4">
                 <div class="card shadow-sm h-100">
                     <div class="card-header bg-primary text-white">
                         <h5 class="mb-0">
@@ -137,7 +137,7 @@
             </div>
 
             <!-- Reportes CDP -->
-            <div class="col-md-6 col-lg-4 mb-4">
+            <div class="col-md-6 col-lg-3 mb-4">
                 <div class="card shadow-sm h-100">
                     <div class="card-header bg-info text-white">
                         <h5 class="mb-0">
@@ -159,6 +159,34 @@
                         <small class="text-muted mt-2 d-block">
                             <i class="bi bi-info-circle me-1"></i>
                             Opcional - Seleccione un reporte CDP completado
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reportes Janis -->
+            <div class="col-md-6 col-lg-3 mb-4">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-file-earmark-text me-2"></i>
+                            Reporte Janis
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <label for="{{ form.reporte_janis.id_for_label }}" class="form-label fw-bold">
+                            Seleccionar reporte:
+                        </label>
+                        {{ form.reporte_janis }}
+                        {% if form.reporte_janis.errors %}
+                            <div class="invalid-feedback d-block">
+                                <i class="bi bi-exclamation-circle me-1"></i>
+                                {{ form.reporte_janis.errors.0 }}
+                            </div>
+                        {% endif %}
+                        <small class="text-muted mt-2 d-block">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Opcional - Seleccione un reporte Janis completado
                         </small>
                     </div>
                 </div>
