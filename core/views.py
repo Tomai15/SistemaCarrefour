@@ -207,7 +207,7 @@ def generar_reporte_vtex_view(request):
     """
     Vista para generar un nuevo reporte de VTEX.
 
-    Muestra un formulario para ingresar fechas y encola la generación del reporte.
+    Muestra un formulario para ingresar fechas y filtros, y encola la generación del reporte.
     """
     if request.method == 'POST':
         form = GenerarReporteVtexForm(request.POST)
@@ -216,16 +216,23 @@ def generar_reporte_vtex_view(request):
             # Obtener fechas del formulario
             fecha_inicio = form.cleaned_data['fecha_inicio']
             fecha_fin = form.cleaned_data['fecha_fin']
+            estados_seleccionados = form.cleaned_data.get('estados', [])
 
             # Formatear fechas para el servicio (DD/MM/YYYY)
             fecha_inicio_str = fecha_inicio.strftime("%d/%m/%Y")
             fecha_fin_str = fecha_fin.strftime("%d/%m/%Y")
 
-            # Crear el reporte en estado PENDIENTE
+            # Preparar filtros (solo si se seleccionaron estados)
+            filtros = None
+            if estados_seleccionados:
+                filtros = {'estados': estados_seleccionados}
+
+            # Crear el reporte en estado PENDIENTE con los filtros aplicados
             nuevo_reporte = ReporteVtex.objects.create(
                 fecha_inicio=fecha_inicio,
                 fecha_fin=fecha_fin,
-                estado=ReporteVtex.Estado.PENDIENTE
+                estado=ReporteVtex.Estado.PENDIENTE,
+                filtros=filtros
             )
 
             # Encolar tarea en Django-Q
@@ -234,7 +241,8 @@ def generar_reporte_vtex_view(request):
                     'core.tasks.generar_reporte_vtex_async',
                     fecha_inicio_str,
                     fecha_fin_str,
-                    nuevo_reporte.id  # Pasar solo el ID, no el objeto completo
+                    nuevo_reporte.id,  # Pasar solo el ID, no el objeto completo
+                    filtros  # Pasar los filtros a la tarea
                 )
 
                 messages.success(
@@ -819,10 +827,45 @@ class ReportePaywayDeleteView(ReporteDeleteMixin, DeleteView):
 
 
 # --- VTEX ---
-class ReporteVtexRetryView(ReporteRetryMixin, View):
-    model = ReporteVtex
-    task_name = 'core.tasks.generar_reporte_vtex_async'
-    success_url = 'lista_reportes_vtex'
+class ReporteVtexRetryView(View):
+    """
+    Vista para reintentar reportes VTEX fallidos.
+
+    Es diferente al mixin general porque necesita pasar los filtros
+    guardados en el reporte cuando se reintenta.
+    """
+    def post(self, request, pk):
+        reporte = get_object_or_404(ReporteVtex, pk=pk)
+
+        if reporte.estado != ReporteVtex.Estado.ERROR:
+            messages.warning(request, 'Solo se pueden reintentar reportes con estado ERROR.')
+            return redirect('lista_reportes_vtex')
+
+        # Resetear estado
+        reporte.estado = ReporteVtex.Estado.PENDIENTE
+        reporte.save()
+
+        # Formatear fechas
+        fecha_inicio_str = reporte.fecha_inicio.strftime('%d/%m/%Y')
+        fecha_fin_str = reporte.fecha_fin.strftime('%d/%m/%Y')
+
+        # Obtener filtros guardados en el reporte
+        filtros = reporte.filtros
+
+        # Encolar tarea con filtros
+        try:
+            async_task(
+                'core.tasks.generar_reporte_vtex_async',
+                fecha_inicio_str,
+                fecha_fin_str,
+                reporte.id,
+                filtros  # Pasar los filtros guardados
+            )
+            messages.success(request, f'Reporte VTEX #{reporte.id} encolado para reintento.')
+        except Exception as e:
+            messages.error(request, f'Error al encolar reintento: {str(e)}')
+
+        return redirect('lista_reportes_vtex')
 
 
 class ReporteVtexDeleteView(ReporteDeleteMixin, DeleteView):

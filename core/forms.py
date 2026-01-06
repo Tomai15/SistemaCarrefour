@@ -4,6 +4,17 @@ from datetime import date
 from core.models import UsuarioPayway, UsuarioCDP, ReporteVtex, ReportePayway, ReporteCDP, ReporteJanis
 
 
+# Estados de VTEX disponibles para filtrar
+ESTADOS_VTEX_CHOICES = [
+    ('payment-pending', 'Pago Pendiente'),
+    ('payment-approved', 'Pago Aprobado'),
+    ('ready-for-handling', 'Listo para Preparar'),
+    ('handling', 'En Preparación'),
+    ('invoiced', 'Facturado'),
+    ('canceled', 'Cancelado'),
+]
+
+
 class RangoFechasFormMixin:
     """
     Mixin para formularios que requieren rango de fechas.
@@ -225,6 +236,16 @@ class GenerarReporteVtexForm(RangoFechasFormMixin, forms.Form):
             'placeholder': 'Seleccione fecha de fin'
         }),
         help_text='Fecha hasta la cual se generará el reporte'
+    )
+
+    estados = forms.MultipleChoiceField(
+        label='Filtrar por Estado',
+        choices=ESTADOS_VTEX_CHOICES,
+        required=False,
+        widget=forms.CheckboxSelectMultiple(attrs={
+            'class': 'form-check-input'
+        }),
+        help_text='Seleccione los estados de pedidos a incluir. Si no selecciona ninguno, se incluirán todos.'
     )
 
 

@@ -33,6 +33,19 @@ class UsuarioVtex(models.Model):
         return f"Credenciales VTEX - {self.account_name}"
 
 
+class UsuarioJanis(models.Model):
+    api_key = models.CharField(max_length=200, verbose_name="Janis API Key")
+    api_secret = models.CharField(max_length=500, verbose_name="Janis API Secret")
+    client_code = models.CharField(max_length=100, verbose_name="Janis Client Code")
+
+    def __str__(self):
+        return f"Credenciales Janis - {self.client_code}"
+
+    class Meta:
+        verbose_name = "Usuario Janis"
+        verbose_name_plural = "Usuarios Janis"
+
+
 class ReportePayway(models.Model):
     class Estado(models.TextChoices):
         PENDIENTE = 'PENDIENTE', _('Pendiente')
@@ -74,6 +87,16 @@ class ReporteVtex(models.Model):
         COMPLETADO = 'COMPLETADO', _('Completado')
         ERROR = 'ERROR', _('Error')
 
+    # Estados disponibles en VTEX OMS para filtrar pedidos
+    ESTADOS_VTEX = [
+        ('payment-pending', 'Pago Pendiente'),
+        ('payment-approved', 'Pago Aprobado'),
+        ('ready-for-handling', 'Listo para Preparar'),
+        ('handling', 'En Preparación'),
+        ('invoiced', 'Facturado'),
+        ('canceled', 'Cancelado'),
+    ]
+
     estado = models.CharField(
         max_length=15,
         choices=Estado.choices,
@@ -82,6 +105,14 @@ class ReporteVtex(models.Model):
 
     fecha_inicio = models.DateField()
     fecha_fin = models.DateField()
+
+    # Filtros aplicados al generar el reporte (JSON con los filtros usados)
+    filtros = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name='Filtros aplicados',
+        help_text='Filtros utilizados para generar el reporte (ej: estados, métodos de pago)'
+    )
 
     def generar_reporter_excel(self):
         """
@@ -201,6 +232,7 @@ class Cruce(models.Model):
     fecha_inicio = models.DateField()
     fecha_fin = models.DateField()
     fecha_realizado = models.DateField(null=True, blank=True)
+    revisar = models.CharField(max_length=100, blank=True, default='')
 
     # Referencias a los reportes usados en el cruce
     reporte_vtex = models.ForeignKey(
@@ -354,6 +386,13 @@ class TransaccionVtex(models.Model):
     medio_pago = models.CharField(max_length=100)
     seller = models.CharField(max_length=100)
     estado = models.CharField(max_length=100)
+    valor = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name='Valor del pedido'
+    )
     reporte = models.ForeignKey(ReporteVtex, on_delete=models.CASCADE, related_name='transacciones')
 
     def convertir_en_diccionario(self):
@@ -363,5 +402,6 @@ class TransaccionVtex(models.Model):
             'fecha': self.fecha_hora,
             'medio_pago': self.medio_pago,
             'seller': self.seller,
-            'estado': self.estado
+            'estado': self.estado,
+            'valor': self.valor
         }

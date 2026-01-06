@@ -58,7 +58,6 @@
                     <button class="nav-link" id="generar-tab" data-bs-toggle="tab" data-bs-target="#generar" type="button" role="tab" aria-controls="generar" aria-selected="false">
                         <i class="bi bi-calendar-range me-2"></i>
                         Generar por Fechas
-                        <span class="badge bg-warning text-dark ms-2">Próximamente</span>
                     </button>
                 </li>
             </ul>
@@ -158,12 +157,6 @@
                             </h5>
                         </div>
                         <div class="card-body p-4">
-                            <div class="alert alert-warning" role="alert">
-                                <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                                <strong>Funcionalidad en desarrollo:</strong> La generación automática por API estará disponible próximamente.
-                                Por ahora, utilice la opción de importar Excel.
-                            </div>
-
                             <form method="post" novalidate>
                                 {% csrf_token %}
 
@@ -219,9 +212,9 @@
 
                                 <hr class="my-4">
 
-                                <!-- Botones de acción (deshabilitados) -->
+                                <!-- Botones de acción -->
                                 <div class="d-flex gap-3">
-                                    <button type="submit" class="btn btn-primary btn-lg px-5 shadow" disabled>
+                                    <button type="submit" class="btn btn-primary btn-lg px-5 shadow">
                                         <i class="bi bi-play-circle me-2"></i>
                                         Generar Reporte
                                     </button>

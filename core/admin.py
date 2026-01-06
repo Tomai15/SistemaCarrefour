@@ -8,6 +8,7 @@ from core.models import (
     UsuarioPayway,
     UsuarioCDP,
     UsuarioVtex,
+    UsuarioJanis,
     TransaccionCDP,
     ReporteCDP,
     Cruce,
@@ -39,3 +40,4 @@ admin.site.register(ReporteJanis)
 admin.site.register(UsuarioPayway)
 admin.site.register(UsuarioCDP)
 admin.site.register(UsuarioVtex)
+admin.site.register(UsuarioJanis)

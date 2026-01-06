@@ -71,7 +71,7 @@ class ReporteVtexService:
             )
         return credenciales
 
-    async def generar_reporte(self, fecha_inicio, fecha_fin, reporte_id):
+    async def generar_reporte(self, fecha_inicio, fecha_fin, reporte_id, filtros=None):
         """
         Genera un reporte de VTEX para el rango de fechas especificado.
 
@@ -79,6 +79,7 @@ class ReporteVtexService:
             fecha_inicio: Fecha de inicio en formato DD/MM/YYYY
             fecha_fin: Fecha de fin en formato DD/MM/YYYY
             reporte_id: ID del objeto ReporteVtex en la base de datos
+            filtros: Diccionario con filtros a aplicar (ej: {'estados': ['invoiced', 'canceled']})
 
         Returns:
             bool: True si se generó exitosamente, False en caso contrario
@@ -92,6 +93,8 @@ class ReporteVtexService:
             await sync_to_async(reporte.save)()
 
             logger.info(f"Generando reporte VTEX desde {fecha_inicio} hasta {fecha_fin}")
+            if filtros:
+                logger.info(f"Filtros aplicados: {filtros}")
 
             # Obtener credenciales desde la base de datos
             credenciales = await self._obtener_credenciales()
@@ -100,7 +103,8 @@ class ReporteVtexService:
             pedidos_vtex = await sync_to_async(self.descargarVtex)(
                 fecha_inicio,
                 fecha_fin,
-                credenciales
+                credenciales,
+                filtros
             )
 
             # Guardar transacciones en la base de datos
@@ -143,7 +147,7 @@ class ReporteVtexService:
         Args:
             transacciones_df: DataFrame de pandas con las transacciones
                             Columnas esperadas: orderId, sequence, creationDate,
-                                              paymentNames, seller, statusDescription
+                                              paymentNames, seller, statusDescription, totalValue
             reporte: Objeto ReporteVtex
 
         Returns:
@@ -157,8 +161,18 @@ class ReporteVtexService:
 
         for _, row in transacciones_df.iterrows():
             try:
-                # Parsear fecha (puede venir en diferentes formatos)
-                fecha_hora = pd.to_datetime(row['creationDate'], utc=True)
+                # Parsear fecha UTC y convertir a hora Argentina (UTC-3)
+                fecha_hora_utc = pd.to_datetime(row['creationDate'], utc=True)
+                fecha_hora = (fecha_hora_utc - timedelta(hours=3)).replace(tzinfo=None)
+
+                # Obtener el valor del pedido (viene en centavos, dividir por 100)
+                valor_raw = row.get('totalValue', None)
+                valor = None
+                if valor_raw is not None:
+                    try:
+                        valor = float(valor_raw) / 100  # VTEX devuelve valores en centavos
+                    except (ValueError, TypeError):
+                        valor = None
 
                 transaccion = TransaccionVtex(
                     numero_pedido=str(row['orderId']),
@@ -167,6 +181,7 @@ class ReporteVtexService:
                     medio_pago=str(row.get('paymentNames', 'N/A')),
                     seller=str(row.get('seller', 'No encontrado')),
                     estado=str(row.get('statusDescription', 'Desconocido')),
+                    valor=valor,
                     reporte=reporte
                 )
                 transacciones_objetos.append(transaccion)
@@ -189,7 +204,7 @@ class ReporteVtexService:
         """Formatea fecha para la API de VTEX"""
         return fecha.strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
-    def get_pedidos(self, ini, fin, url, headers):
+    def get_pedidos(self, ini, fin, url, headers, filtros=None):
         """
         Hace una request y devuelve los pedidos + cantidad de páginas.
 
@@ -198,6 +213,7 @@ class ReporteVtexService:
             fin: Fecha fin
             url: URL de la API
             headers: Headers con credenciales
+            filtros: Diccionario con filtros a aplicar (ej: {'estados': ['invoiced']})
 
         Returns:
             tuple: (lista de pedidos, cantidad de páginas)
@@ -208,6 +224,14 @@ class ReporteVtexService:
             "per_page": 100,
             "orderBy": "creationDate,asc"
         }
+
+        # Aplicar filtro de estados si se proporcionó
+        if filtros and filtros.get('estados'):
+            estados = filtros['estados']
+            # VTEX acepta múltiples estados separados por coma
+            estados_str = ','.join(estados)
+            params["f_status"] = estados_str
+
         response = requests.get(url, headers=headers, params=params)
         data = response.json()
         return data.get("list", []), data.get("paging", {}).get("pages", 0)
@@ -322,7 +346,7 @@ class ReporteVtexService:
 
         return pedidos_unicos
 
-    def descargarVtex(self, fecha_inicio_usuario, fecha_fin_usuario, credenciales):
+    def descargarVtex(self, fecha_inicio_usuario, fecha_fin_usuario, credenciales, filtros=None):
         """
         Descarga pedidos de VTEX usando la API.
 
@@ -330,6 +354,7 @@ class ReporteVtexService:
             fecha_inicio_usuario: Fecha inicio DD/MM/YYYY
             fecha_fin_usuario: Fecha fin DD/MM/YYYY
             credenciales: Objeto UsuarioVtex con app_key, app_token, account_name
+            filtros: Diccionario con filtros a aplicar (ej: {'estados': ['invoiced']})
 
         Returns:
             DataFrame: Pedidos de VTEX procesados
@@ -360,7 +385,7 @@ class ReporteVtexService:
             if fecha_siguiente > fecha_hasta:
                 fecha_siguiente = fecha_hasta
 
-            pedidos, paginas = self.get_pedidos(fecha_actual, fecha_siguiente, url, headers)
+            pedidos, paginas = self.get_pedidos(fecha_actual, fecha_siguiente, url, headers, filtros)
             logger.info(f"Probando con {fecha_actual} a {fecha_siguiente} - {paginas} páginas")
 
             if paginas > 30:
@@ -376,6 +401,12 @@ class ReporteVtexService:
                     "per_page": per_page,
                     "orderBy": "creationDate,asc"
                 }
+
+                # Aplicar filtro de estados si se proporcionó
+                if filtros and filtros.get('estados'):
+                    estados_str = ','.join(filtros['estados'])
+                    params["f_status"] = estados_str
+
                 response = requests.get(url, headers=headers, params=params)
                 data = response.json()
                 pedidos = data.get("list", [])
@@ -402,8 +433,8 @@ class ReporteVtexService:
         # Convertir a DataFrame
         pedidos_vtex = pd.DataFrame(list(pedidos_unicos.values()))
 
-        # Seleccionar solo las columnas necesarias
-        columnas_requeridas = ["orderId", "sequence", "creationDate", "paymentNames", "seller", "statusDescription"]
+        # Seleccionar solo las columnas necesarias (incluye totalValue para el valor del pedido)
+        columnas_requeridas = ["orderId", "sequence", "creationDate", "paymentNames", "seller", "statusDescription", "totalValue"]
         columnas_disponibles = [col for col in columnas_requeridas if col in pedidos_vtex.columns]
         pedidos_vtex = pedidos_vtex[columnas_disponibles]
 

@@ -29,8 +29,8 @@
 
     <!-- Información del reporte -->
     <section class="row mb-4">
-        <div class="col-md-6">
-            <div class="card shadow-sm border-success">
+        <div class="col-md-4">
+            <div class="card shadow-sm border-success h-100">
                 <div class="card-body">
                     <div class="d-flex align-items-center">
                         <i class="bi bi-calendar-check text-success fs-1 me-3"></i>
@@ -46,8 +46,8 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-6">
-            <div class="card shadow-sm border-danger">
+        <div class="col-md-4">
+            <div class="card shadow-sm border-danger h-100">
                 <div class="card-body">
                     <div class="d-flex align-items-center">
                         <i class="bi bi-calendar-x text-danger fs-1 me-3"></i>
@@ -58,6 +58,36 @@
                                     {{ reporte.fecha_fin|date:"d/m/Y" }}
                                 </time>
                             </h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-primary h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-start">
+                        <i class="bi bi-funnel text-primary fs-1 me-3"></i>
+                        <div>
+                            <small class="text-muted d-block">Filtros aplicados</small>
+                            {% if reporte.filtros and reporte.filtros.estados %}
+                                <div class="d-flex flex-wrap gap-1 mt-1">
+                                    {% for estado in reporte.filtros.estados %}
+                                        <span class="badge bg-primary">
+                                            {% if estado == 'payment-pending' %}Pago Pendiente
+                                            {% elif estado == 'payment-approved' %}Pago Aprobado
+                                            {% elif estado == 'ready-for-handling' %}Listo para Preparar
+                                            {% elif estado == 'handling' %}En Preparación
+                                            {% elif estado == 'invoiced' %}Facturado
+                                            {% elif estado == 'canceled' %}Cancelado
+                                            {% else %}{{ estado }}
+                                            {% endif %}
+                                        </span>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <h5 class="mb-0 fw-bold text-muted">Todos los estados</h5>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -100,6 +130,10 @@
                                 Seller
                             </th>
                             <th scope="col">
+                                <i class="bi bi-currency-dollar me-1"></i>
+                                Valor
+                            </th>
+                            <th scope="col">
                                 <i class="bi bi-info-circle me-1"></i>
                                 Estado
                             </th>
@@ -128,6 +162,15 @@
                                     <i class="bi bi-building me-1"></i>
                                     {{ transaccion.seller }}
                                 </span>
+                            </td>
+                            <td>
+                                {% if transaccion.valor %}
+                                    <span class="text-success fw-bold">
+                                        ${{ transaccion.valor|floatformat:2 }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
                             </td>
                             <td>
                                 {% if transaccion.estado == 'Aprobada' or transaccion.estado == 'aprobada' %}

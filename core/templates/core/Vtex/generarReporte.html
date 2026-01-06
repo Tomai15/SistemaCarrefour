@@ -133,6 +133,44 @@
 
                         <hr class="my-4">
 
+                        <!-- Filtros de Estado -->
+                        <div class="mb-4">
+                            <label class="form-label fs-5 fw-bold">
+                                <i class="bi bi-funnel text-primary me-2"></i>
+                                {{ form.estados.label }}
+                            </label>
+                            <div class="card bg-light border-0">
+                                <div class="card-body">
+                                    <div class="row">
+                                        {% for checkbox in form.estados %}
+                                        <div class="col-md-6 col-lg-4 mb-2">
+                                            <div class="form-check">
+                                                {{ checkbox.tag }}
+                                                <label class="form-check-label" for="{{ checkbox.id_for_label }}">
+                                                    {{ checkbox.choice_label }}
+                                                </label>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% if form.estados.help_text %}
+                                <div class="form-text">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    {{ form.estados.help_text }}
+                                </div>
+                            {% endif %}
+                            {% if form.estados.errors %}
+                                <div class="invalid-feedback d-block">
+                                    <i class="bi bi-exclamation-circle me-1"></i>
+                                    {{ form.estados.errors.0 }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <hr class="my-4">
+
                         <!-- Botones de acción -->
                         <div class="d-flex gap-3">
                             <button type="submit" class="btn btn-primary btn-lg px-5 shadow">

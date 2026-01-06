@@ -92,7 +92,7 @@
                         </div>
 
                         <!-- Fecha de Fin -->
-                        <div class="bg-light rounded p-2">
+                        <div class="bg-light rounded p-2 mb-3">
                             <div class="d-flex align-items-center">
                                 <i class="bi bi-calendar-x text-danger fs-4 me-2"></i>
                                 <div>
@@ -102,6 +102,36 @@
                                             {{ reporte.fecha_fin|date:"d/m/Y" }}
                                         </time>
                                     </strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Filtros aplicados -->
+                        <div class="bg-light rounded p-2">
+                            <div class="d-flex align-items-start">
+                                <i class="bi bi-funnel text-primary fs-4 me-2"></i>
+                                <div class="flex-grow-1">
+                                    <small class="text-muted d-block">Filtros aplicados</small>
+                                    {% if reporte.filtros and reporte.filtros.estados %}
+                                        <div class="d-flex flex-wrap gap-1 mt-1">
+                                            {% for estado in reporte.filtros.estados %}
+                                                <span class="badge bg-primary bg-opacity-75 small">
+                                                    {% if estado == 'payment-pending' %}Pago Pendiente
+                                                    {% elif estado == 'payment-approved' %}Pago Aprobado
+                                                    {% elif estado == 'ready-for-handling' %}Listo para Preparar
+                                                    {% elif estado == 'handling' %}En Preparación
+                                                    {% elif estado == 'invoiced' %}Facturado
+                                                    {% elif estado == 'canceled' %}Cancelado
+                                                    {% else %}{{ estado }}
+                                                    {% endif %}
+                                                </span>
+                                            {% endfor %}
+                                        </div>
+                                    {% else %}
+                                        <span class="text-muted small">
+                                            <i class="bi bi-dash me-1"></i>Sin filtros (todos los estados)
+                                        </span>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>
