@@ -1,18 +1,10 @@
 from django import forms
 from django.core.exceptions import ValidationError
 from datetime import date
-from core.models import UsuarioPayway, UsuarioCDP, ReporteVtex, ReportePayway, ReporteCDP, ReporteJanis
-
-
-# Estados de VTEX disponibles para filtrar
-ESTADOS_VTEX_CHOICES = [
-    ('payment-pending', 'Pago Pendiente'),
-    ('payment-approved', 'Pago Aprobado'),
-    ('ready-for-handling', 'Listo para Preparar'),
-    ('handling', 'En Preparación'),
-    ('invoiced', 'Facturado'),
-    ('canceled', 'Cancelado'),
-]
+from core.models import (
+    UsuarioPayway, UsuarioCDP, ReporteVtex, ReportePayway, ReporteCDP, ReporteJanis,
+    TipoFiltroVtex, ValorFiltroVtex
+)
 
 
 class RangoFechasFormMixin:
@@ -238,15 +230,29 @@ class GenerarReporteVtexForm(RangoFechasFormMixin, forms.Form):
         help_text='Fecha hasta la cual se generará el reporte'
     )
 
-    estados = forms.MultipleChoiceField(
+    # Campo dinámico para filtros de estado (se carga desde la BD)
+    filtros_estado = forms.ModelMultipleChoiceField(
+        queryset=ValorFiltroVtex.objects.none(),  # Se configura en __init__
         label='Filtrar por Estado',
-        choices=ESTADOS_VTEX_CHOICES,
         required=False,
         widget=forms.CheckboxSelectMultiple(attrs={
             'class': 'form-check-input'
         }),
         help_text='Seleccione los estados de pedidos a incluir. Si no selecciona ninguno, se incluirán todos.'
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Cargar los valores de filtro de estado desde la BD
+        try:
+            tipo_estado = TipoFiltroVtex.objects.get(codigo='estado', activo=True)
+            self.fields['filtros_estado'].queryset = ValorFiltroVtex.objects.filter(
+                tipo_filtro=tipo_estado,
+                activo=True
+            ).order_by('nombre')
+        except TipoFiltroVtex.DoesNotExist:
+            # Si no existe el tipo de filtro, dejamos el queryset vacío
+            pass
 
 
 class GenerarReporteCDPForm(RangoFechasFormMixin, forms.Form):

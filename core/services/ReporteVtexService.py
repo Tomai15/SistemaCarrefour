@@ -71,7 +71,7 @@ class ReporteVtexService:
             )
         return credenciales
 
-    async def generar_reporte(self, fecha_inicio, fecha_fin, reporte_id, filtros=None):
+    async def generar_reporte(self, fecha_inicio, fecha_fin, reporte_id):
         """
         Genera un reporte de VTEX para el rango de fechas especificado.
 
@@ -79,7 +79,6 @@ class ReporteVtexService:
             fecha_inicio: Fecha de inicio en formato DD/MM/YYYY
             fecha_fin: Fecha de fin en formato DD/MM/YYYY
             reporte_id: ID del objeto ReporteVtex en la base de datos
-            filtros: Diccionario con filtros a aplicar (ej: {'estados': ['invoiced', 'canceled']})
 
         Returns:
             bool: True si se generó exitosamente, False en caso contrario
@@ -93,6 +92,9 @@ class ReporteVtexService:
             await sync_to_async(reporte.save)()
 
             logger.info(f"Generando reporte VTEX desde {fecha_inicio} hasta {fecha_fin}")
+
+            # Obtener filtros desde las relaciones del reporte
+            filtros = await sync_to_async(reporte.obtener_filtros_para_api)()
             if filtros:
                 logger.info(f"Filtros aplicados: {filtros}")
 
@@ -213,7 +215,7 @@ class ReporteVtexService:
             fin: Fecha fin
             url: URL de la API
             headers: Headers con credenciales
-            filtros: Diccionario con filtros a aplicar (ej: {'estados': ['invoiced']})
+            filtros: Diccionario con filtros en formato API (ej: {'f_status': ['invoiced', 'canceled']})
 
         Returns:
             tuple: (lista de pedidos, cantidad de páginas)
@@ -225,12 +227,13 @@ class ReporteVtexService:
             "orderBy": "creationDate,asc"
         }
 
-        # Aplicar filtro de estados si se proporcionó
-        if filtros and filtros.get('estados'):
-            estados = filtros['estados']
-            # VTEX acepta múltiples estados separados por coma
-            estados_str = ','.join(estados)
-            params["f_status"] = estados_str
+        # Aplicar filtros si se proporcionaron
+        # El formato viene de obtener_filtros_para_api: {parametro_api: [valores]}
+        if filtros:
+            for parametro, valores in filtros.items():
+                if valores:
+                    # VTEX acepta múltiples valores separados por coma
+                    params[parametro] = ','.join(valores)
 
         response = requests.get(url, headers=headers, params=params)
         data = response.json()
@@ -402,10 +405,12 @@ class ReporteVtexService:
                     "orderBy": "creationDate,asc"
                 }
 
-                # Aplicar filtro de estados si se proporcionó
-                if filtros and filtros.get('estados'):
-                    estados_str = ','.join(filtros['estados'])
-                    params["f_status"] = estados_str
+                # Aplicar filtros si se proporcionaron
+                # El formato viene de obtener_filtros_para_api: {parametro_api: [valores]}
+                if filtros:
+                    for parametro, valores in filtros.items():
+                        if valores:
+                            params[parametro] = ','.join(valores)
 
                 response = requests.get(url, headers=headers, params=params)
                 data = response.json()

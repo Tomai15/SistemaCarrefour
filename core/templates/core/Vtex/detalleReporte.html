@@ -70,18 +70,11 @@
                         <i class="bi bi-funnel text-primary fs-1 me-3"></i>
                         <div>
                             <small class="text-muted d-block">Filtros aplicados</small>
-                            {% if reporte.filtros and reporte.filtros.estados %}
+                            {% if reporte.filtros_aplicados.exists %}
                                 <div class="d-flex flex-wrap gap-1 mt-1">
-                                    {% for estado in reporte.filtros.estados %}
+                                    {% for filtro in reporte.filtros_aplicados.all %}
                                         <span class="badge bg-primary">
-                                            {% if estado == 'payment-pending' %}Pago Pendiente
-                                            {% elif estado == 'payment-approved' %}Pago Aprobado
-                                            {% elif estado == 'ready-for-handling' %}Listo para Preparar
-                                            {% elif estado == 'handling' %}En Preparación
-                                            {% elif estado == 'invoiced' %}Facturado
-                                            {% elif estado == 'canceled' %}Cancelado
-                                            {% else %}{{ estado }}
-                                            {% endif %}
+                                            {{ filtro.valor_filtro.nombre }}
                                         </span>
                                     {% endfor %}
                                 </div>

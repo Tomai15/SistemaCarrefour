@@ -245,7 +245,6 @@ class ReporteJanisService:
 
         todos_los_pedidos = []
         page = 1
-        total_pages = None
 
         while True:
             headers = self._get_headers(credenciales, page)
@@ -257,27 +256,18 @@ class ReporteJanisService:
                 logger.error(f"Error en request a Janis API: {e}")
                 raise
 
-            # Obtener total de registros del header
-            total_registros = int(response.headers.get('x-janis-total', 0))
-
-            if total_pages is None:
-                total_pages = (total_registros + self.PAGE_SIZE - 1) // self.PAGE_SIZE
-                logger.info(f"Total de registros: {total_registros}, páginas: {total_pages}")
-
             # Parsear respuesta
             data = response.json()
 
+            # Si la respuesta es vacía, no hay más páginas
             if not data:
+                logger.info(f"Página {page} vacía, fin de paginación")
                 break
 
             todos_los_pedidos.extend(data)
-            logger.info(f"Página {page}/{total_pages} - {len(data)} pedidos descargados")
+            logger.info(f"Página {page} - {len(data)} pedidos descargados (total acumulado: {len(todos_los_pedidos)})")
 
             page += 1
-
-            # Verificar si hay más páginas
-            if page > total_pages:
-                break
 
         logger.info(f"Total pedidos descargados: {len(todos_los_pedidos)}")
 

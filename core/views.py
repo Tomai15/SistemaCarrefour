@@ -9,7 +9,11 @@ import os
 
 from django_q.tasks import async_task
 
-from core.models import ReportePayway, ReporteVtex, ReporteCDP, ReporteJanis, Cruce, UsuarioPayway, UsuarioCDP
+from core.models import (
+    ReportePayway, ReporteVtex, ReporteCDP, ReporteJanis, Cruce,
+    UsuarioPayway, UsuarioCDP,
+    TipoFiltroVtex, ValorFiltroVtex, FiltroReporteVtex
+)
 from core.forms import (
     GenerarReportePaywayForm,
     GenerarReporteVtexForm,
@@ -216,24 +220,28 @@ def generar_reporte_vtex_view(request):
             # Obtener fechas del formulario
             fecha_inicio = form.cleaned_data['fecha_inicio']
             fecha_fin = form.cleaned_data['fecha_fin']
-            estados_seleccionados = form.cleaned_data.get('estados', [])
+            filtros_estado = form.cleaned_data.get('filtros_estado', [])
 
             # Formatear fechas para el servicio (DD/MM/YYYY)
             fecha_inicio_str = fecha_inicio.strftime("%d/%m/%Y")
             fecha_fin_str = fecha_fin.strftime("%d/%m/%Y")
 
-            # Preparar filtros (solo si se seleccionaron estados)
-            filtros = None
-            if estados_seleccionados:
-                filtros = {'estados': estados_seleccionados}
-
-            # Crear el reporte en estado PENDIENTE con los filtros aplicados
+            # Crear el reporte en estado PENDIENTE
             nuevo_reporte = ReporteVtex.objects.create(
                 fecha_inicio=fecha_inicio,
                 fecha_fin=fecha_fin,
-                estado=ReporteVtex.Estado.PENDIENTE,
-                filtros=filtros
+                estado=ReporteVtex.Estado.PENDIENTE
             )
+
+            # Crear los registros de filtros aplicados
+            if filtros_estado:
+                tipo_estado = TipoFiltroVtex.objects.get(codigo='estado')
+                for valor_filtro in filtros_estado:
+                    FiltroReporteVtex.objects.create(
+                        reporte=nuevo_reporte,
+                        tipo_filtro=tipo_estado,
+                        valor_filtro=valor_filtro
+                    )
 
             # Encolar tarea en Django-Q
             try:
@@ -241,8 +249,7 @@ def generar_reporte_vtex_view(request):
                     'core.tasks.generar_reporte_vtex_async',
                     fecha_inicio_str,
                     fecha_fin_str,
-                    nuevo_reporte.id,  # Pasar solo el ID, no el objeto completo
-                    filtros  # Pasar los filtros a la tarea
+                    nuevo_reporte.id  # El servicio obtendrá los filtros del reporte
                 )
 
                 messages.success(
@@ -831,8 +838,8 @@ class ReporteVtexRetryView(View):
     """
     Vista para reintentar reportes VTEX fallidos.
 
-    Es diferente al mixin general porque necesita pasar los filtros
-    guardados en el reporte cuando se reintenta.
+    Los filtros ya están guardados en el reporte mediante FiltroReporteVtex,
+    el servicio los obtiene automáticamente.
     """
     def post(self, request, pk):
         reporte = get_object_or_404(ReporteVtex, pk=pk)
@@ -849,17 +856,13 @@ class ReporteVtexRetryView(View):
         fecha_inicio_str = reporte.fecha_inicio.strftime('%d/%m/%Y')
         fecha_fin_str = reporte.fecha_fin.strftime('%d/%m/%Y')
 
-        # Obtener filtros guardados en el reporte
-        filtros = reporte.filtros
-
-        # Encolar tarea con filtros
+        # Encolar tarea (los filtros se obtienen del reporte en el servicio)
         try:
             async_task(
                 'core.tasks.generar_reporte_vtex_async',
                 fecha_inicio_str,
                 fecha_fin_str,
-                reporte.id,
-                filtros  # Pasar los filtros guardados
+                reporte.id
             )
             messages.success(request, f'Reporte VTEX #{reporte.id} encolado para reintento.')
         except Exception as e:

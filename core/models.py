@@ -46,6 +46,82 @@ class UsuarioJanis(models.Model):
         verbose_name_plural = "Usuarios Janis"
 
 
+# =============================================================================
+# MODELOS DE FILTROS VTEX
+# =============================================================================
+
+class TipoFiltroVtex(models.Model):
+    """
+    Catálogo de tipos de filtros disponibles en la API de VTEX.
+
+    Ejemplos: estado del pedido, método de pago, seller, etc.
+    """
+    codigo = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="Código interno del filtro (ej: 'estado', 'metodo_pago')"
+    )
+    nombre = models.CharField(
+        max_length=100,
+        help_text="Nombre legible del filtro (ej: 'Estado del pedido')"
+    )
+    parametro_api = models.CharField(
+        max_length=50,
+        help_text="Parámetro que usa la API de VTEX (ej: 'f_status', 'f_paymentNames')"
+    )
+    activo = models.BooleanField(
+        default=True,
+        help_text="Si está activo, aparece como opción en el formulario"
+    )
+
+    class Meta:
+        verbose_name = "Tipo de Filtro VTEX"
+        verbose_name_plural = "Tipos de Filtros VTEX"
+        ordering = ['nombre']
+
+    def __str__(self):
+        return self.nombre
+
+
+class ValorFiltroVtex(models.Model):
+    """
+    Catálogo de valores posibles para cada tipo de filtro.
+
+    Ejemplos para tipo 'estado': invoiced, canceled, payment-pending, etc.
+    """
+    tipo_filtro = models.ForeignKey(
+        TipoFiltroVtex,
+        on_delete=models.CASCADE,
+        related_name='valores',
+        help_text="Tipo de filtro al que pertenece este valor"
+    )
+    codigo = models.CharField(
+        max_length=100,
+        help_text="Código que usa la API de VTEX (ej: 'invoiced', 'payment-pending')"
+    )
+    nombre = models.CharField(
+        max_length=100,
+        help_text="Nombre legible del valor (ej: 'Facturado', 'Pago Pendiente')"
+    )
+    activo = models.BooleanField(
+        default=True,
+        help_text="Si está activo, aparece como opción en el formulario"
+    )
+
+    class Meta:
+        verbose_name = "Valor de Filtro VTEX"
+        verbose_name_plural = "Valores de Filtros VTEX"
+        ordering = ['tipo_filtro', 'nombre']
+        unique_together = ['tipo_filtro', 'codigo']
+
+    def __str__(self):
+        return f"{self.tipo_filtro.nombre}: {self.nombre}"
+
+
+# =============================================================================
+# MODELOS DE REPORTES
+# =============================================================================
+
 class ReportePayway(models.Model):
     class Estado(models.TextChoices):
         PENDIENTE = 'PENDIENTE', _('Pendiente')
@@ -87,16 +163,6 @@ class ReporteVtex(models.Model):
         COMPLETADO = 'COMPLETADO', _('Completado')
         ERROR = 'ERROR', _('Error')
 
-    # Estados disponibles en VTEX OMS para filtrar pedidos
-    ESTADOS_VTEX = [
-        ('payment-pending', 'Pago Pendiente'),
-        ('payment-approved', 'Pago Aprobado'),
-        ('ready-for-handling', 'Listo para Preparar'),
-        ('handling', 'En Preparación'),
-        ('invoiced', 'Facturado'),
-        ('canceled', 'Cancelado'),
-    ]
-
     estado = models.CharField(
         max_length=15,
         choices=Estado.choices,
@@ -106,13 +172,51 @@ class ReporteVtex(models.Model):
     fecha_inicio = models.DateField()
     fecha_fin = models.DateField()
 
-    # Filtros aplicados al generar el reporte (JSON con los filtros usados)
+    # DEPRECATED: Campo legacy, usar la relación filtros_aplicados en su lugar
+    # Se mantiene temporalmente para migración de datos
     filtros = models.JSONField(
         null=True,
         blank=True,
-        verbose_name='Filtros aplicados',
-        help_text='Filtros utilizados para generar el reporte (ej: estados, métodos de pago)'
+        verbose_name='Filtros aplicados (LEGACY)',
+        help_text='DEPRECATED: Usar filtros_aplicados'
     )
+
+    class Meta:
+        verbose_name = "Reporte VTEX"
+        verbose_name_plural = "Reportes VTEX"
+
+    def __str__(self):
+        return f"Reporte VTEX #{self.id} ({self.fecha_inicio} - {self.fecha_fin})"
+
+    def obtener_filtros_por_tipo(self, codigo_tipo):
+        """
+        Obtiene los valores de filtro aplicados para un tipo específico.
+
+        Args:
+            codigo_tipo: Código del tipo de filtro (ej: 'estado')
+
+        Returns:
+            QuerySet de ValorFiltroVtex
+        """
+        return ValorFiltroVtex.objects.filter(
+            filtros_reportes__reporte=self,
+            tipo_filtro__codigo=codigo_tipo
+        )
+
+    def obtener_filtros_para_api(self):
+        """
+        Genera el diccionario de filtros para enviar a la API de VTEX.
+
+        Returns:
+            dict: {parametro_api: [valor1, valor2, ...]}
+        """
+        filtros_api = {}
+        for filtro in self.filtros_aplicados.select_related('tipo_filtro', 'valor_filtro').all():
+            param = filtro.tipo_filtro.parametro_api
+            if param not in filtros_api:
+                filtros_api[param] = []
+            filtros_api[param].append(filtro.valor_filtro.codigo)
+        return filtros_api
 
     def generar_reporter_excel(self):
         """
@@ -131,6 +235,49 @@ class ReporteVtex(models.Model):
             data_frame_transacciones['fecha'] = data_frame_transacciones['fecha'].dt.tz_localize(None)
         data_frame_transacciones.to_excel(ruta_final,index=False)
         return ruta_final
+
+
+class FiltroReporteVtex(models.Model):
+    """
+    Relación entre un ReporteVtex y los filtros aplicados.
+
+    Permite asociar múltiples valores de filtro a un reporte.
+    """
+    reporte = models.ForeignKey(
+        ReporteVtex,
+        on_delete=models.CASCADE,
+        related_name='filtros_aplicados',
+        help_text="Reporte al que se aplica este filtro"
+    )
+    tipo_filtro = models.ForeignKey(
+        TipoFiltroVtex,
+        on_delete=models.CASCADE,
+        related_name='filtros_reportes',
+        help_text="Tipo de filtro aplicado"
+    )
+    valor_filtro = models.ForeignKey(
+        ValorFiltroVtex,
+        on_delete=models.CASCADE,
+        related_name='filtros_reportes',
+        help_text="Valor del filtro aplicado"
+    )
+
+    class Meta:
+        verbose_name = "Filtro de Reporte VTEX"
+        verbose_name_plural = "Filtros de Reportes VTEX"
+        unique_together = ['reporte', 'tipo_filtro', 'valor_filtro']
+
+    def __str__(self):
+        return f"Reporte #{self.reporte.id} - {self.tipo_filtro.nombre}: {self.valor_filtro.nombre}"
+
+    def clean(self):
+        """Valida que el valor pertenezca al tipo de filtro correcto."""
+        from django.core.exceptions import ValidationError
+        if self.valor_filtro.tipo_filtro != self.tipo_filtro:
+            raise ValidationError(
+                f"El valor '{self.valor_filtro}' no pertenece al tipo de filtro '{self.tipo_filtro}'"
+            )
+
 
 class ReporteCDP(models.Model):
     class Estado(models.TextChoices):

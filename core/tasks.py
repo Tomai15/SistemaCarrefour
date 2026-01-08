@@ -81,17 +81,17 @@ def generar_reporte_payway_async(fecha_inicio, fecha_fin, reporte_id, ruta_carpe
         raise
 
 
-def generar_reporte_vtex_async(fecha_inicio, fecha_fin, reporte_id, filtros=None, ruta_carpeta=None):
+def generar_reporte_vtex_async(fecha_inicio, fecha_fin, reporte_id, ruta_carpeta=None):
     """
     Genera un reporte de VTEX de forma asíncrona.
 
     Esta función está diseñada para ser ejecutada por Django-Q workers.
+    Los filtros se obtienen automáticamente del reporte mediante FiltroReporteVtex.
 
     Args:
         fecha_inicio (str): Fecha de inicio en formato DD/MM/YYYY
         fecha_fin (str): Fecha de fin en formato DD/MM/YYYY
         reporte_id (int): ID del reporte creado en la base de datos
-        filtros (dict, optional): Filtros a aplicar (ej: {'estados': ['invoiced']})
         ruta_carpeta (str, optional): Ruta donde guardar archivos.
                                       Si es None, usa MEDIA_ROOT/reportes_vtex
 
@@ -109,13 +109,10 @@ def generar_reporte_vtex_async(fecha_inicio, fecha_fin, reporte_id, filtros=None
             'core.tasks.generar_reporte_vtex_async',
             '01/12/2024',
             '10/12/2024',
-            reporte_id,
-            {'estados': ['invoiced']}
+            reporte_id
         )
     """
     logger.info(f"[Django-Q] Iniciando generación asíncrona VTEX: {fecha_inicio} - {fecha_fin}")
-    if filtros:
-        logger.info(f"[Django-Q] Filtros aplicados: {filtros}")
 
     try:
         # Obtener el reporte de la base de datos
@@ -128,12 +125,11 @@ def generar_reporte_vtex_async(fecha_inicio, fecha_fin, reporte_id, filtros=None
         # Instanciar el servicio
         servicio = ReporteVtexService(ruta_carpeta=ruta_carpeta)
 
-        # Ejecutar la generación (puede tardar minutos u horas)
+        # Ejecutar la generación (los filtros se obtienen del reporte)
         resultado = async_to_sync(servicio.generar_reporte)(
             fecha_inicio,
             fecha_fin,
-            reporte_id,
-            filtros
+            reporte_id
         )
 
         logger.info(f"[Django-Q] Reporte VTEX #{reporte_id} generado exitosamente")
