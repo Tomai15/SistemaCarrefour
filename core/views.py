@@ -16,7 +16,7 @@ from django_q.tasks import async_task
 from core.models import (
     ReportePayway, ReporteVtex, ReporteCDP, ReporteJanis, Cruce,
     UsuarioPayway, UsuarioCDP,
-    TipoFiltroVtex, ValorFiltroVtex, FiltroReporteVtex
+    ValorFiltroVtex, FiltroReporteVtex
 )
 from core.forms import (
     GenerarReportePaywayForm,
@@ -238,14 +238,13 @@ def generar_reporte_vtex_view(request: HttpRequest) -> HttpResponse:
             )
 
             # Crear los registros de filtros aplicados
-            if filtros_estado:
-                tipo_estado = TipoFiltroVtex.objects.get(codigo='estado')
-                for valor_filtro in filtros_estado:
-                    FiltroReporteVtex.objects.create(
-                        reporte=nuevo_reporte,
-                        tipo_filtro=tipo_estado,
-                        valor_filtro=valor_filtro
-                    )
+            # Cada valor_filtro tiene su propio tipo_filtro (pueden tener diferentes parametros de API)
+            for valor_filtro in filtros_estado:
+                FiltroReporteVtex.objects.create(
+                    reporte=nuevo_reporte,
+                    tipo_filtro=valor_filtro.tipo_filtro,
+                    valor_filtro=valor_filtro
+                )
 
             # Encolar tarea en Django-Q
             try:

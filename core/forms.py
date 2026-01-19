@@ -231,16 +231,11 @@ class GenerarReporteVtexForm(RangoFechasFormMixin, forms.Form):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        # Cargar los valores de filtro de estado desde la BD
-        try:
-            tipo_estado = TipoFiltroVtex.objects.get(codigo='estado', activo=True)
-            self.fields['filtros_estado'].queryset = ValorFiltroVtex.objects.filter(
-                tipo_filtro=tipo_estado,
-                activo=True
-            ).order_by('nombre')
-        except TipoFiltroVtex.DoesNotExist:
-            # Si no existe el tipo de filtro, dejamos el queryset vacío
-            pass
+        # Cargar los valores de filtro de todos los tipos activos relacionados a estados
+        self.fields['filtros_estado'].queryset = ValorFiltroVtex.objects.filter(
+            tipo_filtro__activo=True,
+            activo=True
+        ).select_related('tipo_filtro').order_by('nombre')
 
 
 class GenerarReporteCDPForm(RangoFechasFormMixin, forms.Form):

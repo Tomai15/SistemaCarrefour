@@ -19,6 +19,15 @@ def cargar_datos_iniciales(apps, schema_editor):
         activo=True
     )
 
+    tipo_estado_verificando_factura = TipoFiltroVtex.objects.create(
+        codigo='estado_verificando_factura',
+        nombre='Estado del pedido (verificando factura)',
+        parametro_api='f_statusDescription',
+        activo=True
+    )
+    estados_verificando_factura = [
+        ('Verificando Fatura','Verficiando Factura')
+    ]
     # Valores para el filtro de estado
     estados = [
         ('payment-pending', 'Pago Pendiente'),
@@ -36,7 +45,13 @@ def cargar_datos_iniciales(apps, schema_editor):
             nombre=nombre,
             activo=True
         )
-
+    for codigo, nombre in estados_verificando_factura:
+        ValorFiltroVtex.objects.create(
+            tipo_filtro=tipo_estado_verificando_factura,
+            codigo=codigo,
+            nombre=nombre,
+            activo=True
+        )
 
 def migrar_datos_existentes(apps, schema_editor):
     """
@@ -86,8 +101,8 @@ def revertir_datos(apps, schema_editor):
     # Eliminar todos los filtros de reportes
     FiltroReporteVtex.objects.all().delete()
 
-    # Eliminar el tipo de filtro (cascade eliminará los valores)
-    TipoFiltroVtex.objects.filter(codigo='estado').delete()
+    # Eliminar los tipos de filtro (cascade eliminará los valores)
+    TipoFiltroVtex.objects.filter(codigo__in=['estado', 'estado_verificando_factura']).delete()
 
 
 class Migration(migrations.Migration):
