@@ -340,7 +340,8 @@ class CruceService:
             return ""
 
         if vtex.estado == "Verificando Fatura":
-            return "Verificar, estado en vtex verificando factura"
+            return ("Verificar que este cobrado en decidir"
+                    ", estado en vtex verificando factura")
 
         # Helper para verificar estado entregado de forma segura
         cdp_entregado = cdp.estado_entregado() if cdp else False
