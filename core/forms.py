@@ -108,7 +108,7 @@ class GenerarReportePaywayForm(forms.Form):
 
     def clean(self) -> dict[str, Any]:
         """Validación personalizada del formulario."""
-        cleaned_data: dict[str, Any] = super().clean()
+        cleaned_data: dict[str, Any] = super().clean() or {}
         fecha_inicio = cleaned_data.get('fecha_inicio')
         fecha_fin = cleaned_data.get('fecha_fin')
 
@@ -229,7 +229,7 @@ class GenerarReporteVtexForm(RangoFechasFormMixin, forms.Form):
         help_text='Seleccione los estados de pedidos a incluir. Si no selecciona ninguno, se incluirán todos.'
     )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         # Cargar los valores de filtro de estado desde la BD
         try:
@@ -335,7 +335,7 @@ class GenerarCruceForm(forms.Form):
         })
     )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         # Personalizar las etiquetas de los reportes para mostrar más información
         self.fields['reporte_vtex'].label_from_instance = lambda obj: f"#{obj.id} - {obj.fecha_inicio} a {obj.fecha_fin}"
@@ -343,9 +343,9 @@ class GenerarCruceForm(forms.Form):
         self.fields['reporte_cdp'].label_from_instance = lambda obj: f"#{obj.id} - {obj.fecha_inicio} a {obj.fecha_fin}"
         self.fields['reporte_janis'].label_from_instance = lambda obj: f"#{obj.id} - {obj.fecha_inicio} a {obj.fecha_fin}"
 
-    def clean(self):
+    def clean(self) -> dict[str, Any]:
         """Validar que se seleccionen al menos 2 reportes de diferentes tipos."""
-        cleaned_data = super().clean()
+        cleaned_data: dict[str, Any] = super().clean() or {}
 
         reporte_vtex = cleaned_data.get('reporte_vtex')
         reporte_payway = cleaned_data.get('reporte_payway')

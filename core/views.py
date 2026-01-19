@@ -1,10 +1,14 @@
+from __future__ import annotations
+
+from typing import Any
+
 from django.shortcuts import render, get_object_or_404, redirect
 from django.views.generic import ListView, DetailView, View, DeleteView
 from django.views.generic.detail import SingleObjectMixin
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpRequest, HttpResponse
 from django.urls import reverse_lazy
 from django.contrib import messages
-from django.db.models import Sum, Count, Q
+from django.db.models import Sum, Count, Q, QuerySet
 import os
 
 from django_q.tasks import async_task
@@ -27,7 +31,7 @@ from datetime import date
 
 
 # Create your views here.
-def home(request):
+def home(request: HttpRequest) -> HttpResponse:
     return render(request, 'core/home.html')
 
 class reportePaywayListView(ListView):
@@ -48,23 +52,23 @@ class reportePaywayDetailView(SingleObjectMixin, ListView):
     paginate_by = 20  # Transacciones por página
     context_object_name = 'transacciones'
 
-    def get(self, request, *args, **kwargs):
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
         # Obtener el reporte (SingleObjectMixin)
         self.object = self.get_object(queryset=ReportePayway.objects.all())
         return super().get(request, *args, **kwargs)
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[Any]:
         # Obtener transacciones del reporte actual, ordenadas por fecha descendente
         return self.object.transacciones.all().order_by('-fecha_hora')
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context: dict[str, Any] = super().get_context_data(**kwargs)
         # Agregar el reporte al contexto
         context['reporte'] = self.object
         return context
 
 
-def exportar_reporte_excel(request, pk):
+def exportar_reporte_excel(request: HttpRequest, pk: int) -> HttpResponse:
     """Vista para exportar un reporte de Payway a Excel."""
     reporte = get_object_or_404(ReportePayway, pk=pk)
 
@@ -85,7 +89,7 @@ def exportar_reporte_excel(request, pk):
     return response
 
 
-def generar_reporte_payway_view(request):
+def generar_reporte_payway_view(request: HttpRequest) -> HttpResponse:
     """
     Vista para generar un nuevo reporte de Payway.
 
@@ -170,23 +174,23 @@ class reporteVtexDetailView(SingleObjectMixin, ListView):
     paginate_by = 20  # Transacciones por página
     context_object_name = 'transacciones'
 
-    def get(self, request, *args, **kwargs):
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
         # Obtener el reporte (SingleObjectMixin)
         self.object = self.get_object(queryset=ReporteVtex.objects.all())
         return super().get(request, *args, **kwargs)
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[Any]:
         # Obtener transacciones del reporte actual, ordenadas por fecha descendente
         return self.object.transacciones.all().order_by('-fecha_hora')
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context: dict[str, Any] = super().get_context_data(**kwargs)
         # Agregar el reporte al contexto
         context['reporte'] = self.object
         return context
 
 
-def exportar_reporte_vtex_excel(request, pk):
+def exportar_reporte_vtex_excel(request: HttpRequest, pk: int) -> HttpResponse:
     """Vista para exportar un reporte de VTEX a Excel."""
     reporte = get_object_or_404(ReporteVtex, pk=pk)
 
@@ -207,7 +211,7 @@ def exportar_reporte_vtex_excel(request, pk):
     return response
 
 
-def generar_reporte_vtex_view(request):
+def generar_reporte_vtex_view(request: HttpRequest) -> HttpResponse:
     """
     Vista para generar un nuevo reporte de VTEX.
 
@@ -273,7 +277,7 @@ def generar_reporte_vtex_view(request):
 
 # ==================== VISTA DE AJUSTES ====================
 
-def ajustes_view(request):
+def ajustes_view(request: HttpRequest) -> HttpResponse:
     """
     Vista para gestionar credenciales de Payway y CDP.
 
@@ -348,23 +352,23 @@ class reporteCDPDetailView(SingleObjectMixin, ListView):
     paginate_by = 20  # Transacciones por página
     context_object_name = 'transacciones'
 
-    def get(self, request, *args, **kwargs):
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
         # Obtener el reporte (SingleObjectMixin)
         self.object = self.get_object(queryset=ReporteCDP.objects.all())
         return super().get(request, *args, **kwargs)
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[Any]:
         # Obtener transacciones del reporte actual, ordenadas por fecha descendente
         return self.object.transacciones.all().order_by('-fecha_hora')
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context: dict[str, Any] = super().get_context_data(**kwargs)
         # Agregar el reporte al contexto
         context['reporte'] = self.object
         return context
 
 
-def exportar_reporte_cdp_excel(request, pk):
+def exportar_reporte_cdp_excel(request: HttpRequest, pk: int) -> HttpResponse:
     """Vista para exportar un reporte de CDP a Excel."""
     reporte = get_object_or_404(ReporteCDP, pk=pk)
 
@@ -385,7 +389,7 @@ def exportar_reporte_cdp_excel(request, pk):
     return response
 
 
-def generar_reporte_cdp_view(request):
+def generar_reporte_cdp_view(request: HttpRequest) -> HttpResponse:
     """
     Vista para generar un nuevo reporte de CDP.
 
@@ -470,23 +474,23 @@ class reporteJanisDetailView(SingleObjectMixin, ListView):
     paginate_by = 20  # Transacciones por página
     context_object_name = 'transacciones'
 
-    def get(self, request, *args, **kwargs):
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
         # Obtener el reporte (SingleObjectMixin)
         self.object = self.get_object(queryset=ReporteJanis.objects.all())
         return super().get(request, *args, **kwargs)
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[Any]:
         # Obtener transacciones del reporte actual, ordenadas por fecha descendente
         return self.object.transacciones.all().order_by('-fecha_hora')
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context: dict[str, Any] = super().get_context_data(**kwargs)
         # Agregar el reporte al contexto
         context['reporte'] = self.object
         return context
 
 
-def exportar_reporte_janis_excel(request, pk):
+def exportar_reporte_janis_excel(request: HttpRequest, pk: int) -> HttpResponse:
     """Vista para exportar un reporte de Janis a Excel."""
     reporte = get_object_or_404(ReporteJanis, pk=pk)
 
@@ -507,7 +511,7 @@ def exportar_reporte_janis_excel(request, pk):
     return response
 
 
-def generar_reporte_janis_view(request):
+def generar_reporte_janis_view(request: HttpRequest) -> HttpResponse:
     """
     Vista para generar un nuevo reporte de Janis.
 
@@ -560,7 +564,7 @@ def generar_reporte_janis_view(request):
     return render(request, 'core/Janis/generarReporte.html', {'form': form})
 
 
-def importar_reporte_janis_view(request):
+def importar_reporte_janis_view(request: HttpRequest) -> HttpResponse:
     """
     Vista para importar un reporte de Janis desde un archivo Excel.
 
@@ -651,21 +655,21 @@ class cruceDetailView(SingleObjectMixin, ListView):
     paginate_by = 20
     context_object_name = 'transacciones'
 
-    def get(self, request, *args, **kwargs):
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
         self.object = self.get_object(queryset=Cruce.objects.all())
         # Guardar el estado del filtro
         self.solo_observaciones = request.GET.get('solo_observaciones') == '1'
         return super().get(request, *args, **kwargs)
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[Any]:
         queryset = self.object.transacciones.all().order_by('-fecha_hora')
         # Aplicar filtro si está activo
         if self.solo_observaciones:
             queryset = queryset.exclude(resultado_cruce='').exclude(resultado_cruce__isnull=True)
         return queryset
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context: dict[str, Any] = super().get_context_data(**kwargs)
         context['cruce'] = self.object
         context['solo_observaciones'] = self.solo_observaciones
         # Contar transacciones con observaciones para mostrar en el botón
@@ -675,7 +679,7 @@ class cruceDetailView(SingleObjectMixin, ListView):
         return context
 
 
-def exportar_cruce_excel(request, pk):
+def exportar_cruce_excel(request: HttpRequest, pk: int) -> HttpResponse:
     """Vista para exportar un cruce a Excel.
 
     Soporta filtro ?solo_observaciones=1 para exportar solo transacciones con observaciones.
@@ -702,7 +706,7 @@ def exportar_cruce_excel(request, pk):
     return response
 
 
-def generar_cruce_view(request):
+def generar_cruce_view(request: HttpRequest) -> HttpResponse:
     """
     Vista para generar un nuevo cruce de reportes.
 
@@ -792,11 +796,11 @@ class ReporteRetryMixin:
         - task_name: Nombre de la tarea async ('core.tasks.generar_reporte_payway_async')
         - success_url: URL a la que redirigir después del reintento
     """
-    model = None
-    task_name = None
-    success_url = None
+    model: Any = None
+    task_name: str | None = None
+    success_url: str | None = None
 
-    def post(self, request, pk):
+    def post(self, request: HttpRequest, pk: int) -> HttpResponse:
         reporte = get_object_or_404(self.model, pk=pk)
 
         if reporte.estado != self.model.Estado.ERROR:
@@ -830,11 +834,11 @@ class ReporteDeleteMixin:
         - model: El modelo del reporte
         - success_url: URL a la que redirigir
     """
-    template_name = 'core/confirm_delete.html'  # Template genérico (opcional)
+    template_name: str = 'core/confirm_delete.html'  # Template genérico (opcional)
 
-    def form_valid(self, form):
+    def form_valid(self, form: Any) -> HttpResponse:
         reporte_id = self.object.id
-        response = super().form_valid(form)
+        response = super().form_valid(form)  # type: ignore[misc]
         messages.success(self.request, f'Reporte #{reporte_id} eliminado correctamente.')
         return response
 
@@ -859,7 +863,7 @@ class ReporteVtexRetryView(View):
     Los filtros ya están guardados en el reporte mediante FiltroReporteVtex,
     el servicio los obtiene automáticamente.
     """
-    def post(self, request, pk):
+    def post(self, request: HttpRequest, pk: int) -> HttpResponse:
         reporte = get_object_or_404(ReporteVtex, pk=pk)
 
         if reporte.estado != ReporteVtex.Estado.ERROR:
@@ -926,7 +930,7 @@ class CruceRetryView(View):
     Es diferente a los reportes porque usa los ForeignKeys
     para obtener los IDs de los reportes relacionados.
     """
-    def post(self, request, pk):
+    def post(self, request: HttpRequest, pk: int) -> HttpResponse:
         cruce = get_object_or_404(Cruce, pk=pk)
 
         if cruce.estado != Cruce.Estado.ERROR:
@@ -956,7 +960,7 @@ class CruceDeleteView(ReporteDeleteMixin, DeleteView):
     model = Cruce
     success_url = reverse_lazy('lista_cruces')
 
-    def form_valid(self, form):
+    def form_valid(self, form: Any) -> HttpResponse:
         cruce_id = self.object.id
         response = super(DeleteView, self).form_valid(form)
         messages.success(self.request, f'Cruce #{cruce_id} eliminado correctamente.')

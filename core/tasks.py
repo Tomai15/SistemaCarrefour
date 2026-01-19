@@ -4,6 +4,8 @@ Tareas asíncronas para Django-Q.
 Este archivo contiene todas las funciones que Django-Q puede ejecutar.
 Separadas del servicio principal para mantener separación de responsabilidades.
 """
+from __future__ import annotations
+
 from asgiref.sync import async_to_sync
 
 from core.services.ReportePaywayService import ReportePaywayService
@@ -16,14 +18,14 @@ from django.conf import settings
 import logging
 import os
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 # ============================================================================
 # TAREA PRINCIPAL: Generar reporte de forma asíncrona
 # ============================================================================
 
-def generar_reporte_payway_async(fecha_inicio, fecha_fin, reporte_id, ruta_carpeta=None):
+def generar_reporte_payway_async(fecha_inicio: str, fecha_fin: str, reporte_id: int, ruta_carpeta: str | None = None) -> int:
     """
     Genera un reporte de Payway de forma asíncrona.
 
@@ -81,7 +83,7 @@ def generar_reporte_payway_async(fecha_inicio, fecha_fin, reporte_id, ruta_carpe
         raise
 
 
-def generar_reporte_vtex_async(fecha_inicio, fecha_fin, reporte_id, ruta_carpeta=None):
+def generar_reporte_vtex_async(fecha_inicio: str, fecha_fin: str, reporte_id: int, ruta_carpeta: str | None = None) -> int:
     """
     Genera un reporte de VTEX de forma asíncrona.
 
@@ -140,7 +142,7 @@ def generar_reporte_vtex_async(fecha_inicio, fecha_fin, reporte_id, ruta_carpeta
         raise
 
 
-def generar_reporte_cdp_async(fecha_inicio, fecha_fin, reporte_id, ruta_carpeta=None):
+def generar_reporte_cdp_async(fecha_inicio: str, fecha_fin: str, reporte_id: int, ruta_carpeta: str | None = None) -> int:
     """
     Genera un reporte de CDP de forma asíncrona.
 
@@ -198,7 +200,7 @@ def generar_reporte_cdp_async(fecha_inicio, fecha_fin, reporte_id, ruta_carpeta=
         raise
 
 
-def generar_reporte_janis_async(fecha_inicio, fecha_fin, reporte_id, ruta_carpeta=None):
+def generar_reporte_janis_async(fecha_inicio: str, fecha_fin: str, reporte_id: int, ruta_carpeta: str | None = None) -> int:
     """
     Genera un reporte de Janis de forma asíncrona.
 
@@ -256,7 +258,7 @@ def generar_reporte_janis_async(fecha_inicio, fecha_fin, reporte_id, ruta_carpet
         raise
 
 
-def generar_cruce_async(cruce_id, reporte_vtex_id=None, reporte_payway_id=None, reporte_cdp_id=None, reporte_janis_id=None):
+def generar_cruce_async(cruce_id: int, reporte_vtex_id: int | None = None, reporte_payway_id: int | None = None, reporte_cdp_id: int | None = None, reporte_janis_id: int | None = None) -> int:
     """
     Genera un cruce de reportes de forma asíncrona.
 
