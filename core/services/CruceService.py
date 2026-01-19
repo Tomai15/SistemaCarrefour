@@ -340,8 +340,12 @@ class CruceService:
             return ""
 
         if vtex.estado == "Verificando Fatura":
-            return ("Verificar que este cobrado en decidir"
-                    ", estado en vtex verificando factura")
+            if payway.estado == "Pre autorizada":
+                return ("Cobrar manualmente desde Payway, estado veri"
+                        "ficando factura en vtex")
+            else:
+                    return ("Levantar ticket a WebCenter"
+                            "pedido no existe en decidir")
 
         # Helper para verificar estado entregado de forma segura
         cdp_entregado = cdp.estado_entregado() if cdp else False
