@@ -251,7 +251,10 @@ class CruceService:
                 'estado_payway_2': payway2.estado if payway2 else 'N/A',
                 'estado_cdp': cdp.estado if cdp else 'N/A',
                 'estado_janis': janis.estado if janis else 'N/A',
-                'resultado_cruce': resultado_cruce
+                'resultado_cruce': resultado_cruce,
+                'monto_payway': payway.monto if payway else None,
+                'monto_payway_2': payway2.monto if payway2 else None,
+                'valor_vtex': vtex.valor if vtex else None,
             })
 
         # DEBUG: Resumen de matches
@@ -304,7 +307,7 @@ class CruceService:
                 transaccion = TransaccionCruce(
                     numero_pedido=str(row['numero_pedido']),
                     fecha_hora=row.get('fecha_hora'),
-                    fecha_entrega= row.get('fecha_entrega_janis'),
+                    fecha_entrega=row.get('fecha_entrega_janis'),
                     medio_pago=str(row.get('medio_pago', '')),
                     seller=str(row.get('seller', '')),
                     estado_vtex=str(row.get('estado_vtex', '')),
@@ -313,6 +316,9 @@ class CruceService:
                     estado_cdp=str(row.get('estado_cdp', '')),
                     estado_janis=str(row.get('estado_janis', '')),
                     resultado_cruce=str(row.get('resultado_cruce', '')),
+                    monto_payway=row.get('monto_payway'),
+                    monto_payway_2=row.get('monto_payway_2'),
+                    valor_vtex=row.get('valor_vtex'),
                     cruce=cruce
                 )
                 transacciones_objetos.append(transaccion)

@@ -20,39 +20,44 @@
             <p class="text-muted">Detalle de transacciones cruzadas entre sistemas</p>
         </div>
         <div class="col-md-4 text-end d-flex align-items-center justify-content-end gap-2">
-            <a href="{% url 'exportar_cruce_excel' cruce.id %}{% if solo_observaciones %}?solo_observaciones=1{% endif %}" class="btn btn-success btn-lg shadow">
+            <a id="btn-exportar" href="{% url 'exportar_cruce_excel' cruce.id %}?incluir_observaciones=1" class="btn btn-success btn-lg shadow">
                 <i class="bi bi-file-earmark-spreadsheet me-2"></i>
-                Exportar{% if solo_observaciones %} (filtrado){% endif %}
+                Exportar
             </a>
         </div>
     </header>
 
-    <!-- Filtro de observaciones -->
+    <!-- Filtros de columnas para exportacion -->
     <section class="row mb-4">
         <div class="col-12">
             <div class="card shadow-sm">
-                <div class="card-body d-flex align-items-center justify-content-between">
-                    <div>
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-2">
                         <i class="bi bi-funnel me-2 text-primary"></i>
-                        <span class="fw-bold">Filtros de visualizacion</span>
-                        {% if total_con_observaciones > 0 %}
-                            <span class="badge bg-warning text-dark ms-2">{{ total_con_observaciones }} con observaciones</span>
-                        {% else %}
-                            <span class="badge bg-success ms-2">Sin observaciones</span>
-                        {% endif %}
+                        <span class="fw-bold">Columnas a incluir en el export</span>
                     </div>
-                    <div>
-                        {% if solo_observaciones %}
-                            <a href="?page=1" class="btn btn-outline-secondary">
-                                <i class="bi bi-eye me-1"></i>
-                                Mostrar todas
-                            </a>
-                        {% else %}
-                            <a href="?solo_observaciones=1" class="btn btn-warning">
-                                <i class="bi bi-exclamation-triangle me-1"></i>
-                                Solo con observaciones ({{ total_con_observaciones }})
-                            </a>
-                        {% endif %}
+                    <div class="d-flex flex-wrap gap-4">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input filtro-export" type="checkbox" id="filtro-observaciones" checked>
+                            <label class="form-check-label" for="filtro-observaciones">
+                                <i class="bi bi-clipboard-check me-1"></i>
+                                Observaciones
+                            </label>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input filtro-export" type="checkbox" id="filtro-precio-payway">
+                            <label class="form-check-label" for="filtro-precio-payway">
+                                <i class="bi bi-wallet2 me-1"></i>
+                                Precio Payway
+                            </label>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input filtro-export" type="checkbox" id="filtro-precio-vtex">
+                            <label class="form-check-label" for="filtro-precio-vtex">
+                                <i class="bi bi-cart me-1"></i>
+                                Precio VTEX
+                            </label>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -293,12 +298,12 @@
                     <ul class="pagination mb-0">
                         {% if page_obj.has_previous %}
                         <li class="page-item">
-                            <a class="page-link" href="?page=1{% if solo_observaciones %}&solo_observaciones=1{% endif %}" title="Primera página">
+                            <a class="page-link" href="?page=1" title="Primera página">
                                 <i class="bi bi-chevron-double-left"></i>
                             </a>
                         </li>
                         <li class="page-item">
-                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if solo_observaciones %}&solo_observaciones=1{% endif %}" title="Página anterior">
+                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}" title="Página anterior">
                                 <i class="bi bi-chevron-left"></i>
                             </a>
                         </li>
@@ -312,12 +317,12 @@
 
                         {% if page_obj.has_next %}
                         <li class="page-item">
-                            <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if solo_observaciones %}&solo_observaciones=1{% endif %}" title="Página siguiente">
+                            <a class="page-link" href="?page={{ page_obj.next_page_number }}" title="Página siguiente">
                                 <i class="bi bi-chevron-right"></i>
                             </a>
                         </li>
                         <li class="page-item">
-                            <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if solo_observaciones %}&solo_observaciones=1{% endif %}" title="Última página">
+                            <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}" title="Última página">
                                 <i class="bi bi-chevron-double-right"></i>
                             </a>
                         </li>
@@ -338,4 +343,30 @@
         </div>
     </section>
 </article>
+
+<script>
+    (function() {
+        const baseUrl = "{% url 'exportar_cruce_excel' cruce.id %}";
+        const btnExportar = document.getElementById('btn-exportar');
+        const checkboxes = document.querySelectorAll('.filtro-export');
+
+        function actualizarUrlExport() {
+            const params = new URLSearchParams();
+            if (document.getElementById('filtro-observaciones').checked) {
+                params.set('incluir_observaciones', '1');
+            }
+            if (document.getElementById('filtro-precio-payway').checked) {
+                params.set('incluir_precio_payway', '1');
+            }
+            if (document.getElementById('filtro-precio-vtex').checked) {
+                params.set('incluir_precio_vtex', '1');
+            }
+            btnExportar.href = baseUrl + '?' + params.toString();
+        }
+
+        checkboxes.forEach(function(cb) {
+            cb.addEventListener('change', actualizarUrlExport);
+        });
+    })();
+</script>
 {% endblock %}

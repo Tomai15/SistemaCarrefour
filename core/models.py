@@ -431,30 +431,36 @@ class Cruce(models.Model):
         related_name='cruces', verbose_name='Reporte Janis'
     )
 
-    def generar_reporter_excel(self, solo_observaciones: bool = False) -> str:
+    def generar_reporter_excel(
+        self,
+        incluir_observaciones: bool = True,
+        incluir_precio_payway: bool = False,
+        incluir_precio_vtex: bool = False
+    ) -> str:
         """
-        Genera el archivo Excel del cruce con múltiples hojas:
-        - Cruce: Resultado del cruce de transacciones
-        - VTEX: Reporte VTEX completo (si existe)
-        - Payway: Reporte Payway completo (si existe)
-        - CDP: Reporte CDP completo (si existe)
-        - Janis: Reporte Janis completo (si existe)
+        Genera el archivo Excel del cruce.
 
         Args:
-            solo_observaciones: Si es True, solo exporta transacciones con resultado_cruce
+            incluir_observaciones: Si es True, incluye la columna resultado_cruce
+            incluir_precio_payway: Si es True, incluye las columnas monto_payway y monto_payway_2
+            incluir_precio_vtex: Si es True, incluye la columna valor_vtex
 
         Returns:
             str: Ruta completa del archivo Excel generado
         """
-        sufijo = '_observaciones' if solo_observaciones else ''
-        ruta_final = os.path.join(settings.MEDIA_ROOT, f'cruce_{self.fecha_inicio}_to_{self.fecha_fin}{sufijo}.xlsx')
+        ruta_final = os.path.join(settings.MEDIA_ROOT, f'cruce_{self.fecha_inicio}_to_{self.fecha_fin}.xlsx')
 
         with pd.ExcelWriter(ruta_final, engine='openpyxl') as writer:
             # Hoja principal: Cruce
             transacciones = self.transacciones.all()
-            if solo_observaciones:
-                transacciones = transacciones.exclude(resultado_cruce='').exclude(resultado_cruce__isnull=True)
-            transacciones_convertidas = list(map(lambda t: t.convertir_en_diccionario(), transacciones))
+            transacciones_convertidas = list(map(
+                lambda t: t.convertir_en_diccionario(
+                    incluir_observaciones=incluir_observaciones,
+                    incluir_precio_payway=incluir_precio_payway,
+                    incluir_precio_vtex=incluir_precio_vtex
+                ),
+                transacciones
+            ))
             df_cruce = pd.DataFrame(transacciones_convertidas)
             if not df_cruce.empty and 'fecha' in df_cruce.columns and pd.api.types.is_datetime64_any_dtype(df_cruce['fecha']):
                 df_cruce['fecha'] = df_cruce['fecha'].dt.tz_convert('America/Argentina/Buenos_Aires').dt.tz_localize(None)
@@ -521,10 +527,18 @@ class TransaccionCruce(models.Model):
     estado_cdp = models.CharField(max_length=100, blank=True, default='')
     estado_janis = models.CharField(max_length=100, blank=True, default='')
     resultado_cruce = models.CharField(max_length=255, blank=True, default='')
+    monto_payway = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    monto_payway_2 = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    valor_vtex = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     cruce = models.ForeignKey(Cruce, on_delete=models.CASCADE, related_name='transacciones')
 
-    def convertir_en_diccionario(self) -> dict[str, Any]:
-        return {
+    def convertir_en_diccionario(
+        self,
+        incluir_observaciones: bool = True,
+        incluir_precio_payway: bool = False,
+        incluir_precio_vtex: bool = False
+    ) -> dict[str, Any]:
+        datos: dict[str, Any] = {
             'Pedido': self.numero_pedido,
             'fecha': self.fecha_hora,
             'fecha_entrega': self.fecha_entrega,
@@ -535,8 +549,15 @@ class TransaccionCruce(models.Model):
             'estado_payway_2': self.estado_payway_2,
             'estado_cdp': self.estado_cdp,
             'estado_janis': self.estado_janis,
-            'resultado_cruce': self.resultado_cruce
         }
+        if incluir_precio_vtex:
+            datos['valor_vtex'] = self.valor_vtex
+        if incluir_precio_payway:
+            datos['monto_payway'] = self.monto_payway
+            datos['monto_payway_2'] = self.monto_payway_2
+        if incluir_observaciones:
+            datos['resultado_cruce'] = self.resultado_cruce
+        return datos
 
 
 class TransaccionCDP(models.Model):

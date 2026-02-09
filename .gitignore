@@ -24,7 +24,12 @@ wheels/
 *.egg
 openapi-spec vtex.json
 openapi.json
-cruceBotSupremo.zip
+
+# Archivos comprimidos
+*.zip
+*.rar
+*.7z
+*.tar.gz
 
 # Django
 *.log
@@ -54,4 +59,3 @@ Thumbs.db
 
 # Windows-specific issue
 nul
-/CruceBotSupremoVersionAutoActualizable.zip
