@@ -6,6 +6,8 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.views.generic import ListView, DetailView, View, DeleteView
 from django.views.generic.detail import SingleObjectMixin
 from django.http import FileResponse, Http404, HttpRequest, HttpResponse
+import csv
+import io
 from django.urls import reverse_lazy
 from django.contrib import messages
 from django.db.models import Sum, Count, Q, QuerySet
@@ -1230,3 +1232,67 @@ def sellers_no_carrefour_view(request: HttpRequest) -> HttpResponse:
     else:
         form = SellersNoCarrefourForm()
     return render(request, template, {'form': form})
+
+
+# ── Descarga de plantillas de ejemplo ──────────────────────────────────
+
+PLANTILLAS: dict[str, dict] = {
+    'janis': {
+        'formato': 'xlsx',
+        'nombre': 'plantilla_janis.xlsx',
+        'columnas': ['numero_pedido', 'numero_transaccion', 'fecha_hora', 'medio_pago', 'seller', 'estado'],
+    },
+    'modal_logistica': {
+        'formato': 'xlsx',
+        'nombre': 'plantilla_modal_logistica.xlsx',
+        'columnas': ['skuid', 'modal logistica'],
+    },
+    'busqueda_eans': {
+        'formato': 'csv',
+        'nombre': 'plantilla_eans.csv',
+        'columnas': ['ean'],
+    },
+    'busqueda_categorias': {
+        'formato': 'csv',
+        'nombre': 'plantilla_categorias.csv',
+        'columnas': ['categoria'],
+    },
+    'sellers_externos': {
+        'formato': 'csv',
+        'nombre': 'plantilla_sellers_externos.csv',
+        'columnas': ['numero_coleccion'],
+    },
+    'sellers_no_carrefour': {
+        'formato': 'csv',
+        'nombre': 'plantilla_sellers_no_carrefour.csv',
+        'columnas': ['Fravega', 'Megatone', 'Provincia', 'OnCity'],
+    },
+}
+
+
+def descargar_plantilla(request: HttpRequest, tipo: str) -> HttpResponse:
+    config = PLANTILLAS.get(tipo)
+    if not config:
+        raise Http404("Plantilla no encontrada")
+
+    if config['formato'] == 'csv':
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="{config["nombre"]}"'
+        writer = csv.writer(response)
+        writer.writerow(config['columnas'])
+        return response
+
+    # xlsx
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.append(config['columnas'])
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    response['Content-Disposition'] = f'attachment; filename="{config["nombre"]}"'
+    return response

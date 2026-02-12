@@ -69,6 +69,10 @@
                                 <i class="bi bi-info-circle me-1"></i>
                                 Archivo CSV con una columna de codigos EAN
                             </div>
+                            <a href="{% url 'descargar_plantilla' 'busqueda_eans' %}" class="btn btn-outline-success btn-sm mt-2">
+                                <i class="bi bi-download me-1"></i>
+                                Descargar plantilla de ejemplo
+                            </a>
                             {% if form.archivo_csv.errors %}
                                 <div class="invalid-feedback d-block">
                                     {% for error in form.archivo_csv.errors %}{{ error }}{% endfor %}
