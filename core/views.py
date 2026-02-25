@@ -19,7 +19,7 @@ from core.models import (
     ReportePayway, ReporteVtex, ReporteCDP, ReporteJanis, Cruce,
     UsuarioPayway, UsuarioCDP, UsuarioCarrefourWeb,
     ValorFiltroVtex, FiltroReporteVtex,
-    TareaCatalogacion
+    TareaCatalogacion, SellerVtex
 )
 from core.forms import (
     GenerarReportePaywayForm,
@@ -34,7 +34,8 @@ from core.forms import (
     BusquedaCategoriasForm,
     SellersExternosForm,
     SellersNoCarrefourForm,
-    ActualizarModalForm
+    ActualizarModalForm,
+    ConsultaVisibilidadForm
 )
 from datetime import date
 import csv
@@ -1010,6 +1011,13 @@ class TareaCatalogacionDetailView(DetailView):
     template_name = 'core/Catalogacion/detalleTarea.html'
     context_object_name = 'tarea'
 
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        tarea = self.object
+        if tarea.tipo == TareaCatalogacion.TipoTarea.CONSULTA_VISIBILIDAD:
+            context['resultados_visibilidad'] = tarea.consultas_visibilidad.select_related('sku', 'seller').all()
+        return context
+
 
 class TareaCatalogacionDeleteView(DeleteView):
     model = TareaCatalogacion
@@ -1234,6 +1242,69 @@ def sellers_no_carrefour_view(request: HttpRequest) -> HttpResponse:
     return render(request, template, {'form': form})
 
 
+def consulta_visibilidad_view(request: HttpRequest) -> HttpResponse:
+    template = 'core/Catalogacion/consultaVisibilidad.html'
+    if request.method == 'POST':
+        form = ConsultaVisibilidadForm(request.POST, request.FILES)
+        if form.is_valid():
+            tipo = form.cleaned_data['tipo']
+            texto = form.cleaned_data.get('valores', '').strip()
+            archivo = form.cleaned_data.get('archivo_excel')
+            seller = form.cleaned_data['seller']
+
+            # Extraer valores de Excel o texto
+            if archivo:
+                col_esperada = 'EAN' if tipo == 'ean' else 'SKU'
+                valores, error = _leer_columna_excel(archivo, col_esperada)
+                if error:
+                    messages.error(request, error)
+                    return render(request, template, {'form': form, 'active_tab': tipo})
+            else:
+                valores = [line.strip() for line in texto.splitlines() if line.strip()]
+
+            if not valores:
+                messages.error(request, "No se encontraron valores para consultar.")
+                return render(request, template, {'form': form, 'active_tab': tipo})
+
+            tarea = TareaCatalogacion.objects.create(
+                tipo=TareaCatalogacion.TipoTarea.CONSULTA_VISIBILIDAD,
+                progreso_total=len(valores)
+            )
+
+            if tipo == 'ean':
+                async_task('core.tasks.consulta_visibilidad_ean_async', tarea.id, valores, seller.id)
+                etiqueta = 'EANs'
+            else:
+                async_task('core.tasks.consulta_visibilidad_async', tarea.id, valores, seller.id)
+                etiqueta = 'SKUs'
+
+            messages.success(request, f"Tarea #{tarea.id} creada. Consultando visibilidad de {len(valores)} {etiqueta}.")
+            return redirect('detalle_tarea_catalogacion', pk=tarea.id)
+        else:
+            tipo = request.POST.get('tipo', 'ean')
+            return render(request, template, {'form': form, 'active_tab': tipo})
+    else:
+        form = ConsultaVisibilidadForm()
+    return render(request, template, {'form': form})
+
+
+def _leer_columna_excel(archivo, columna_esperada: str) -> tuple[list[str], str | None]:
+    """Lee una columna de un Excel. Retorna (valores, error)."""
+    try:
+        df = pd.read_excel(archivo)
+        columna = None
+        for col in df.columns:
+            if col.strip().upper() == columna_esperada.upper():
+                columna = col
+                break
+        if columna is None:
+            return [], f"El archivo no contiene una columna '{columna_esperada}'."
+        valores = [str(v).strip() for v in df[columna].dropna().tolist() if str(v).strip()]
+        return valores, None
+    except Exception as e:
+        return [], f"Error leyendo Excel: {e}"
+
+
 # ── Descarga de plantillas de ejemplo ──────────────────────────────────
 
 PLANTILLAS: dict[str, dict] = {
@@ -1266,6 +1337,16 @@ PLANTILLAS: dict[str, dict] = {
         'formato': 'csv',
         'nombre': 'plantilla_sellers_no_carrefour.csv',
         'columnas': ['Fravega', 'Megatone', 'Provincia', 'OnCity'],
+    },
+    'visibilidad_ean': {
+        'formato': 'xlsx',
+        'nombre': 'plantilla_visibilidad_ean.xlsx',
+        'columnas': ['EAN'],
+    },
+    'visibilidad_sku': {
+        'formato': 'xlsx',
+        'nombre': 'plantilla_visibilidad_sku.xlsx',
+        'columnas': ['SKU'],
     },
 }
 

@@ -384,3 +384,33 @@ def sellers_no_carrefour_async(tarea_id: int, diccionario_sellers: dict, headles
     except Exception as e:
         logger.error(f"[Django-Q] Error en tarea #{tarea_id}: {e}", exc_info=True)
         raise
+
+
+def consulta_visibilidad_async(tarea_id: int, sku_ids: list, seller_id: int) -> int:
+    """Consulta de visibilidad de SKUs en un seller VTEX."""
+    logger.info(f"[Django-Q] Iniciando consulta visibilidad para tarea #{tarea_id}")
+    try:
+        tarea = TareaCatalogacion.objects.get(id=tarea_id)
+        from core.services.ConsultaVisibilidadService import ConsultaVisibilidadService
+        servicio = ConsultaVisibilidadService()
+        servicio.ejecutar(tarea, sku_ids, seller_id)
+        logger.info(f"[Django-Q] Tarea #{tarea_id} finalizada")
+        return tarea_id
+    except Exception as e:
+        logger.error(f"[Django-Q] Error en tarea #{tarea_id}: {e}", exc_info=True)
+        raise
+
+
+def consulta_visibilidad_ean_async(tarea_id: int, eans: list, seller_id: int) -> int:
+    """Consulta de visibilidad de SKUs por EAN en un seller VTEX."""
+    logger.info(f"[Django-Q] Iniciando consulta visibilidad por EAN para tarea #{tarea_id}")
+    try:
+        tarea = TareaCatalogacion.objects.get(id=tarea_id)
+        from core.services.ConsultaVisibilidadService import ConsultaVisibilidadService
+        servicio = ConsultaVisibilidadService()
+        servicio.ejecutar_por_ean(tarea, eans, seller_id)
+        logger.info(f"[Django-Q] Tarea #{tarea_id} finalizada")
+        return tarea_id
+    except Exception as e:
+        logger.error(f"[Django-Q] Error en tarea #{tarea_id}: {e}", exc_info=True)
+        raise

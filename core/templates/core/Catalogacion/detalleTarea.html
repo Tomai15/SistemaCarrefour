@@ -145,6 +145,60 @@
         </div>
     </section>
 
+    <!-- Resultados de visibilidad (solo para tareas CONSULTA_VISIBILIDAD) -->
+    {% if resultados_visibilidad %}
+    <section class="card shadow-sm mb-4">
+        <header class="card-header bg-danger text-white">
+            <h2 class="h5 mb-0">
+                <i class="bi bi-eye me-2"></i>
+                Resultados de Visibilidad
+            </h2>
+        </header>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>SKU ID</th>
+                            <th>Visible</th>
+                            <th>Stock</th>
+                            <th>Precio</th>
+                            <th>Imagenes</th>
+                            <th>Motivo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for resultado in resultados_visibilidad %}
+                        <tr>
+                            <td><strong>{{ resultado.sku.skuId }}</strong></td>
+                            <td>
+                                {% if resultado.visible %}
+                                    <span class="badge bg-success">Si</span>
+                                {% else %}
+                                    <span class="badge bg-danger">No</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ resultado.stock|default_if_none:"-" }}</td>
+                            <td>{{ resultado.precio|default_if_none:"-" }}</td>
+                            <td>
+                                {% if resultado.tiene_imagenes is None %}
+                                    -
+                                {% elif resultado.tiene_imagenes %}
+                                    <span class="badge bg-success">Si</span>
+                                {% else %}
+                                    <span class="badge bg-warning text-dark">No</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ resultado.motivo|default:"-" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
     <!-- Boton de descarga (tambien abajo para mayor visibilidad) -->
     {% if tarea.archivo_resultado %}
     <div class="text-center mb-4">

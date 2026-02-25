@@ -20,7 +20,7 @@ class CarrefourAuthService:
 
         await self._log(tarea, "Ingresando a carrefour.com.ar")
         await page.goto("https://www.carrefour.com.ar/")
-        await page.wait_for_timeout(3000)
+        await page.wait_for_timeout(6000)
 
         try:
             await page.locator("button:has-text('Rechazar todo')").click(timeout=5000)

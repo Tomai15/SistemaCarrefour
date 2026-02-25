@@ -7,7 +7,7 @@ from typing import Any, ClassVar
 
 from django.conf import settings
 from django.db import models
-from django.db.models import QuerySet
+from django.db.models import QuerySet, CharField, CASCADE
 from django.utils.translation import gettext_lazy as _
 import pandas as pd
 
@@ -678,6 +678,7 @@ class TareaCatalogacion(models.Model):
         SELLERS_EXTERNOS = 'SELLERS_EXTERNOS', _('Sellers Externos')
         SELLERS_NO_CARREFOUR = 'SELLERS_NO_CARREFOUR', _('Sellers No Carrefour')
         ACTUALIZAR_MODAL = 'ACTUALIZAR_MODAL', _('Actualizar Modal')
+        CONSULTA_VISIBILIDAD = 'CONSULTA_VISIBILIDAD', _('Consulta Visibilidad')
 
     tipo = models.CharField(max_length=30, choices=TipoTarea.choices)
     estado = models.CharField(max_length=15, choices=Estado.choices, default=Estado.PENDIENTE)
@@ -702,3 +703,46 @@ class TareaCatalogacion(models.Model):
         else:
             self.logs = mensaje
         self.save(update_fields=['logs'])
+
+
+class SellerVtex(models.Model):
+    """Credenciales y datos de un seller en VTEX."""
+
+    nombre = models.CharField(max_length=200)
+    url = models.CharField(max_length=300)
+    app_key = models.CharField(max_length=200, verbose_name="API App Key")
+    app_token = models.CharField(max_length=500, verbose_name="API App Token")
+    account_name = models.CharField(max_length=100, verbose_name="Account Name")
+    marketplace = models.ForeignKey(
+        'self', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='sellers', verbose_name="Marketplace madre",
+        help_text="Seller madre/marketplace. Dejar vacio si este seller ES el marketplace."
+    )
+
+    class Meta:
+        verbose_name = "Seller VTEX"
+        verbose_name_plural = "Sellers VTEX"
+
+    def __str__(self) -> str:
+        return self.nombre
+
+
+class ProductoVtex(models.Model):
+    productId = models.CharField(max_length=200, unique=True)
+
+
+class SkuVtex(models.Model):
+    skuId = models.CharField(max_length=200, unique=True)
+    producto = models.ForeignKey(ProductoVtex, on_delete=models.CASCADE, related_name='skus')
+
+
+class ConsultaVisibilidad(models.Model):
+    sku = models.ForeignKey(SkuVtex, on_delete=models.CASCADE, related_name='consultas_visibilidad')
+    seller = models.ForeignKey(SellerVtex, on_delete=models.CASCADE, related_name='consultas_visibilidad')
+    tarea = models.ForeignKey(TareaCatalogacion, on_delete=models.CASCADE, related_name='consultas_visibilidad', null=True, blank=True)
+    visible = models.BooleanField()
+    motivo = models.CharField(max_length=300, blank=True, default='')
+    stock = models.DecimalField(max_digits=10, decimal_places=0, null=True, blank=True)
+    precio = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    tiene_imagenes = models.BooleanField(null=True, blank=True)
+    fecha = models.DateTimeField(auto_now_add=True)

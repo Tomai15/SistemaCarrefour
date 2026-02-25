@@ -60,6 +60,7 @@ urlpatterns = [
     path("catalogacion/sellers-externos/", views.sellers_externos_view, name="sellers_externos"),
     path("catalogacion/sellers-no-carrefour/", views.sellers_no_carrefour_view, name="sellers_no_carrefour"),
     path("catalogacion/actualizar-modal/", views.actualizar_modal_view, name="actualizar_modal"),
+    path("catalogacion/consulta-visibilidad/", views.consulta_visibilidad_view, name="consulta_visibilidad"),
 
     # Plantillas de ejemplo
     path("plantilla/<str:tipo>/", views.descargar_plantilla, name="descargar_plantilla"),

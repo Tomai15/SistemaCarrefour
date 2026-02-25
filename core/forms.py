@@ -7,7 +7,7 @@ from django.core.exceptions import ValidationError
 from datetime import date
 from core.models import (
     UsuarioPayway, UsuarioCDP, ReporteVtex, ReportePayway, ReporteCDP, ReporteJanis,
-    TipoFiltroVtex, ValorFiltroVtex, UsuarioCarrefourWeb
+    TipoFiltroVtex, ValorFiltroVtex, UsuarioCarrefourWeb, SellerVtex
 )
 
 
@@ -472,3 +472,37 @@ class ActualizarModalForm(forms.Form):
         label="Archivo Excel (.xlsx)",
         widget=forms.ClearableFileInput(attrs={'class': 'form-control', 'accept': '.xlsx'})
     )
+
+
+class ConsultaVisibilidadForm(forms.Form):
+    tipo = forms.ChoiceField(
+        choices=[('ean', 'EAN'), ('sku', 'SKU ID')],
+        widget=forms.HiddenInput()
+    )
+    valores = forms.CharField(
+        label="Valores (uno por linea)",
+        required=False,
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 8,
+        })
+    )
+    archivo_excel = forms.FileField(
+        label="Archivo Excel (.xlsx)",
+        required=False,
+        widget=forms.ClearableFileInput(attrs={'class': 'form-control', 'accept': '.xlsx'})
+    )
+    seller = forms.ModelChoiceField(
+        label="Seller",
+        queryset=SellerVtex.objects.all(),
+        empty_label="Selecciona un seller",
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+
+    def clean(self) -> dict[str, Any]:
+        cleaned_data: dict[str, Any] = super().clean() or {}
+        valores = cleaned_data.get('valores', '').strip()
+        archivo = cleaned_data.get('archivo_excel')
+        if not valores and not archivo:
+            raise ValidationError('Debes ingresar valores manualmente o subir un archivo Excel.')
+        return cleaned_data
