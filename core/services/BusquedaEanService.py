@@ -102,10 +102,7 @@ class BusquedaEanService:
                                     no_encontrado_visible = await page.locator(
                                         "text=Disculpanos, no encontramos productos que coincidan con tu búsqueda"
                                     ).is_visible()
-                                    encontrado_markeplace = await page.locator(
-                                        "text=Vendido y entregado por"
-                                    ).is_visible()
-                                    if no_encontrado_visible or encontrado_markeplace:
+                                    if no_encontrado_visible:
                                         estado = "NO ENCONTRADO"
                                     else:
                                         estado = "ENCONTRADO"
