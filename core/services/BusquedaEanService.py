@@ -105,7 +105,25 @@ class BusquedaEanService:
                                     if no_encontrado_visible:
                                         estado = "NO ENCONTRADO"
                                     else:
-                                        estado = "ENCONTRADO"
+                                        # Verificar si es de un seller externo
+                                        es_externo = await page.locator(
+                                            'span.valtech-carrefourar-external-seller-0-x-containerExternalSeller'
+                                        ).first.is_visible()
+                                        if es_externo:
+                                            # Extraer nombre del seller
+                                            nombre_seller = ""
+                                            try:
+                                                nombre_seller = await page.locator(
+                                                    '[data-specification-name="Marca Seller Partner"]'
+                                                ).first.get_attribute('data-specification-value')
+                                            except Exception:
+                                                pass
+                                            if nombre_seller:
+                                                estado = f"ENCONTRADO - SELLER EXTERNO ({nombre_seller})"
+                                            else:
+                                                estado = "ENCONTRADO - SELLER EXTERNO"
+                                        else:
+                                            estado = "ENCONTRADO"
                                 except Exception as e:
                                     async with lock:
                                         await self._log(tarea, f"[W{wid}] Error revisando DOM para {ean}: {e}")
