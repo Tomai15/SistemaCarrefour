@@ -57,5 +57,12 @@ VERSION
 .DS_Store
 Thumbs.db
 
+# Archivos de documentacion/referencia en raiz
+*.pdf
+*.bas
+PROMPT_CLAUDE_CODE.md
+VTEX_RELEVAMIENTO_GESTION_SELLERS.md
+INICIAR_PROYECTO.md
+
 # Windows-specific issue
 nul

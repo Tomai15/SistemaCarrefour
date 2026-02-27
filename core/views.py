@@ -35,7 +35,9 @@ from core.forms import (
     SellersExternosForm,
     SellersNoCarrefourForm,
     ActualizarModalForm,
-    ConsultaVisibilidadForm
+    ConsultaVisibilidadForm,
+    ExportCatalogoForm,
+    CargaStockForm
 )
 from datetime import date
 import csv
@@ -1288,6 +1290,108 @@ def consulta_visibilidad_view(request: HttpRequest) -> HttpResponse:
     return render(request, template, {'form': form})
 
 
+def export_catalogo_view(request: HttpRequest) -> HttpResponse:
+    template = 'core/Catalogacion/exportCatalogo.html'
+    if request.method == 'POST':
+        form = ExportCatalogoForm(request.POST)
+        if form.is_valid():
+            seller = form.cleaned_data['seller']
+            sc_texto = form.cleaned_data.get('sales_channels', '').strip()
+
+            # Parsear sales channels
+            sales_channels_filtro = None
+            if sc_texto:
+                try:
+                    sales_channels_filtro = [int(x.strip()) for x in sc_texto.split(',') if x.strip()]
+                except ValueError:
+                    messages.error(request, "Los sales channels deben ser numeros separados por coma.")
+                    return render(request, template, {'form': form})
+
+            incluir_precio_stock = form.cleaned_data.get('incluir_precio_stock', False)
+
+            tarea = TareaCatalogacion.objects.create(
+                tipo=TareaCatalogacion.TipoTarea.EXPORT_CATALOGO,
+            )
+
+            async_task('core.tasks.export_catalogo_async', tarea.id, seller.id, sales_channels_filtro, incluir_precio_stock)
+
+            messages.success(request, f"Tarea #{tarea.id} creada. Exportando catalogo de {seller.nombre}.")
+            return redirect('detalle_tarea_catalogacion', pk=tarea.id)
+        else:
+            return render(request, template, {'form': form})
+    else:
+        form = ExportCatalogoForm()
+    return render(request, template, {'form': form})
+
+
+def carga_stock_view(request: HttpRequest) -> HttpResponse:
+    template = 'core/Catalogacion/cargaStock.html'
+    if request.method == 'POST':
+        form = CargaStockForm(request.POST, request.FILES)
+        if form.is_valid():
+            archivo = request.FILES['archivo_excel']
+            seller = form.cleaned_data['seller']
+            headless = not form.cleaned_data.get('ver_navegador', True)
+
+            try:
+                df = pd.read_excel(archivo)
+                columnas = [c.strip().lower() for c in df.columns]
+                df.columns = columnas
+
+                # Buscar columna EAN
+                col_ean = None
+                for c in columnas:
+                    if 'ean' in c:
+                        col_ean = c
+                        break
+                if col_ean is None:
+                    messages.error(request, "El Excel debe tener una columna 'EAN'.")
+                    return render(request, template, {'form': form})
+
+                # Buscar columna Stock
+                col_stock = None
+                for c in columnas:
+                    if 'stock' in c:
+                        col_stock = c
+                        break
+                if col_stock is None:
+                    messages.error(request, "El Excel debe tener una columna 'Stock'.")
+                    return render(request, template, {'form': form})
+
+                items = []
+                for _, row in df.iterrows():
+                    ean = str(row[col_ean]).strip()
+                    if not ean or ean == 'nan':
+                        continue
+                    try:
+                        stock_val = int(float(row[col_stock]))
+                    except (ValueError, TypeError):
+                        messages.error(request, f"Valor de stock invalido para EAN {ean}: '{row[col_stock]}'")
+                        return render(request, template, {'form': form})
+                    items.append({'ean': ean, 'stock': stock_val})
+
+                if not items:
+                    messages.error(request, "El archivo no contiene datos validos.")
+                    return render(request, template, {'form': form})
+
+                tarea = TareaCatalogacion.objects.create(
+                    tipo=TareaCatalogacion.TipoTarea.CARGA_STOCK,
+                    progreso_total=len(items)
+                )
+                async_task('core.tasks.carga_stock_async', tarea.id, items, seller.id, headless)
+                messages.success(request, f"Tarea #{tarea.id} creada. Procesando {len(items)} EANs.")
+                return redirect('detalle_tarea_catalogacion', pk=tarea.id)
+
+            except Exception as e:
+                messages.error(request, f"Error leyendo Excel: {e}")
+                return render(request, template, {'form': form})
+        else:
+            return render(request, template, {'form': form})
+    else:
+        form = CargaStockForm()
+    return render(request, template, {'form': form})
+
+
 def _leer_columna_excel(archivo, columna_esperada: str) -> tuple[list[str], str | None]:
     """Lee una columna de un Excel. Retorna (valores, error)."""
     try:
@@ -1347,6 +1451,11 @@ PLANTILLAS: dict[str, dict] = {
         'formato': 'xlsx',
         'nombre': 'plantilla_visibilidad_sku.xlsx',
         'columnas': ['SKU'],
+    },
+    'carga_stock': {
+        'formato': 'xlsx',
+        'nombre': 'plantilla_carga_stock.xlsx',
+        'columnas': ['EAN', 'Stock'],
     },
 }
 

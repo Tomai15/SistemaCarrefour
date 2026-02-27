@@ -474,6 +474,31 @@ class ActualizarModalForm(forms.Form):
     )
 
 
+class ExportCatalogoForm(forms.Form):
+    seller = forms.ModelChoiceField(
+        label="Seller",
+        queryset=SellerVtex.objects.all(),
+        empty_label="Selecciona un seller",
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    sales_channels = forms.CharField(
+        label="Sales Channels a filtrar",
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': '1, 3 (dejar vacio para verificar SC 1 y 3)'
+        }),
+        help_text='Canales de venta separados por coma. Se verifica que contenga AL MENOS UNO (logica OR). Por defecto: 1 y 3.'
+    )
+    incluir_precio_stock = forms.BooleanField(
+        label="Incluir Precio y Stock",
+        required=False,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        help_text='Agrega columnas de Precio y Stock. Desactivar acelera significativamente el proceso (~63% menos llamadas).'
+    )
+
+
 class ConsultaVisibilidadForm(forms.Form):
     tipo = forms.ChoiceField(
         choices=[('ean', 'EAN'), ('sku', 'SKU ID')],
@@ -506,3 +531,23 @@ class ConsultaVisibilidadForm(forms.Form):
         if not valores and not archivo:
             raise ValidationError('Debes ingresar valores manualmente o subir un archivo Excel.')
         return cleaned_data
+
+
+class CargaStockForm(forms.Form):
+    archivo_excel = forms.FileField(
+        label="Archivo Excel (.xlsx)",
+        widget=forms.ClearableFileInput(attrs={'class': 'form-control', 'accept': '.xlsx'})
+    )
+    seller = forms.ModelChoiceField(
+        label="Seller",
+        queryset=SellerVtex.objects.all(),
+        empty_label="Selecciona un seller",
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    ver_navegador = forms.BooleanField(
+        label="Ver navegador en pantalla",
+        required=False,
+        initial=True,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        help_text='Se recomienda dejarlo activado ya que requiere login manual en VTEX admin.'
+    )

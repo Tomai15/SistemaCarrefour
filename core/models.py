@@ -679,6 +679,8 @@ class TareaCatalogacion(models.Model):
         SELLERS_NO_CARREFOUR = 'SELLERS_NO_CARREFOUR', _('Sellers No Carrefour')
         ACTUALIZAR_MODAL = 'ACTUALIZAR_MODAL', _('Actualizar Modal')
         CONSULTA_VISIBILIDAD = 'CONSULTA_VISIBILIDAD', _('Consulta Visibilidad')
+        EXPORT_CATALOGO = 'EXPORT_CATALOGO', _('Export Catalogo')
+        CARGA_STOCK = 'CARGA_STOCK', _('Carga Stock')
 
     tipo = models.CharField(max_length=30, choices=TipoTarea.choices)
     estado = models.CharField(max_length=15, choices=Estado.choices, default=Estado.PENDIENTE)

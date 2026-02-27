@@ -386,6 +386,21 @@ def sellers_no_carrefour_async(tarea_id: int, diccionario_sellers: dict, headles
         raise
 
 
+def export_catalogo_async(tarea_id: int, seller_id: int, sales_channels_filtro: list[int] | None = None, incluir_precio_stock: bool = False) -> int:
+    """Exporta el catalogo completo de un seller VTEX."""
+    logger.info(f"[Django-Q] Iniciando export catalogo para tarea #{tarea_id}")
+    try:
+        tarea = TareaCatalogacion.objects.get(id=tarea_id)
+        from core.services.ExportCatalogoService import ExportCatalogoService
+        servicio = ExportCatalogoService()
+        servicio.ejecutar(tarea, seller_id, sales_channels_filtro, incluir_precio_stock)
+        logger.info(f"[Django-Q] Tarea #{tarea_id} finalizada")
+        return tarea_id
+    except Exception as e:
+        logger.error(f"[Django-Q] Error en tarea #{tarea_id}: {e}", exc_info=True)
+        raise
+
+
 def consulta_visibilidad_async(tarea_id: int, sku_ids: list, seller_id: int) -> int:
     """Consulta de visibilidad de SKUs en un seller VTEX."""
     logger.info(f"[Django-Q] Iniciando consulta visibilidad para tarea #{tarea_id}")
@@ -394,6 +409,21 @@ def consulta_visibilidad_async(tarea_id: int, sku_ids: list, seller_id: int) -> 
         from core.services.ConsultaVisibilidadService import ConsultaVisibilidadService
         servicio = ConsultaVisibilidadService()
         servicio.ejecutar(tarea, sku_ids, seller_id)
+        logger.info(f"[Django-Q] Tarea #{tarea_id} finalizada")
+        return tarea_id
+    except Exception as e:
+        logger.error(f"[Django-Q] Error en tarea #{tarea_id}: {e}", exc_info=True)
+        raise
+
+
+def carga_stock_async(tarea_id: int, items: list, seller_id: int, headless: bool = False) -> int:
+    """Carga manual de stock en VTEX admin via Playwright."""
+    logger.info(f"[Django-Q] Iniciando carga de stock para tarea #{tarea_id}")
+    try:
+        tarea = TareaCatalogacion.objects.get(id=tarea_id)
+        from core.services.CargaStockService import CargaStockService
+        servicio = CargaStockService()
+        async_to_sync(servicio.ejecutar)(tarea, items, seller_id, headless)
         logger.info(f"[Django-Q] Tarea #{tarea_id} finalizada")
         return tarea_id
     except Exception as e:

@@ -1,0 +1,175 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Carga Manual de Stock{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <!-- Header con boton volver -->
+    <header class="row mb-4">
+        <div class="col-12 mb-3">
+            <a href="{% url 'home_catalogacion' %}" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left me-2"></i>
+                Volver al inicio
+            </a>
+        </div>
+        <div class="col-12">
+            <h1 class="display-5 fw-bold text-primary">
+                <i class="bi bi-box-arrow-in-up me-2"></i>
+                Carga Manual de Stock
+            </h1>
+            <p class="text-muted">Sube un Excel con EAN y Stock para actualizar el inventario en VTEX admin via Playwright</p>
+        </div>
+    </header>
+
+    <!-- Mensajes de Django -->
+    {% if messages %}
+        <div class="row mb-4">
+            <div class="col-12">
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                        {% if message.tags == 'error' %}
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        {% elif message.tags == 'success' %}
+                            <i class="bi bi-check-circle-fill me-2"></i>
+                        {% elif message.tags == 'warning' %}
+                            <i class="bi bi-exclamation-circle-fill me-2"></i>
+                        {% else %}
+                            <i class="bi bi-info-circle-fill me-2"></i>
+                        {% endif %}
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    {% endif %}
+
+    <!-- Formulario -->
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-2">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-gear me-2"></i>
+                        Configuracion de Carga
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+
+                        <!-- Archivo Excel -->
+                        <div class="mb-4">
+                            <label class="form-label fs-5 fw-bold">
+                                <i class="bi bi-file-earmark-excel text-success me-2"></i>
+                                Archivo Excel
+                            </label>
+                            {{ form.archivo_excel }}
+                            <div class="form-text">
+                                <i class="bi bi-info-circle me-1"></i>
+                                El archivo debe tener columnas <strong>EAN</strong> y <strong>Stock</strong>.
+                                <a href="{% url 'descargar_plantilla' 'carga_stock' %}" class="ms-2">
+                                    <i class="bi bi-download me-1"></i>Descargar plantilla
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Seller -->
+                        <div class="mb-4">
+                            <label class="form-label fs-5 fw-bold">
+                                <i class="bi bi-shop text-primary me-2"></i>
+                                Seller
+                            </label>
+                            {{ form.seller }}
+                        </div>
+
+                        <!-- Ver navegador -->
+                        <div class="mb-4">
+                            <div class="form-check form-switch">
+                                {{ form.ver_navegador }}
+                                <label class="form-check-label fs-5 fw-bold" for="id_ver_navegador">
+                                    <i class="bi bi-display text-info me-2"></i>
+                                    Ver navegador en pantalla
+                                </label>
+                            </div>
+                            <div class="form-text">
+                                <i class="bi bi-exclamation-circle text-warning me-1"></i>
+                                Se recomienda dejarlo activado para completar el login manual en VTEX admin.
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+                        <div class="d-flex gap-3">
+                            <button type="submit" class="btn btn-primary btn-lg px-5 shadow">
+                                <i class="bi bi-play-fill me-2"></i>
+                                Iniciar Carga
+                            </button>
+                            <a href="{% url 'home_catalogacion' %}" class="btn btn-outline-secondary btn-lg px-4">
+                                <i class="bi bi-x-circle me-2"></i>
+                                Cancelar
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna lateral con informacion -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 bg-light">
+                <div class="card-body">
+                    <h6 class="fw-bold mb-3">
+                        <i class="bi bi-lightbulb text-warning me-2"></i>
+                        Como funciona
+                    </h6>
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-3">
+                            <i class="bi bi-1-circle text-primary me-2"></i>
+                            <small>Se resuelve cada <strong>EAN a SKU ID</strong> via la API de VTEX</small>
+                        </li>
+                        <li class="mb-3">
+                            <i class="bi bi-2-circle text-primary me-2"></i>
+                            <small>Se abre un navegador y navega al <strong>admin de VTEX</strong></small>
+                        </li>
+                        <li class="mb-3">
+                            <i class="bi bi-3-circle text-primary me-2"></i>
+                            <small>El usuario debe <strong>completar el login manualmente</strong> (5 min timeout)</small>
+                        </li>
+                        <li class="mb-3">
+                            <i class="bi bi-4-circle text-primary me-2"></i>
+                            <small>Para cada SKU, navega a inventario, busca <strong>Almacen General</strong> y actualiza el stock</small>
+                        </li>
+                        <li class="mb-0">
+                            <i class="bi bi-5-circle text-primary me-2"></i>
+                            <small>Genera un <strong>Excel de resultados</strong> con el estado de cada operacion</small>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 bg-light mt-3">
+                <div class="card-body">
+                    <h6 class="fw-bold mb-3">
+                        <i class="bi bi-exclamation-triangle text-danger me-2"></i>
+                        Importante
+                    </h6>
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-3">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            <small>El login en VTEX admin es <strong>manual</strong>: cuando se abra el navegador, ingrese sus credenciales</small>
+                        </li>
+                        <li class="mb-3">
+                            <i class="bi bi-clock text-warning me-2"></i>
+                            <small>Tiene <strong>5 minutos</strong> para completar el login antes de que expire</small>
+                        </li>
+                        <li class="mb-0">
+                            <i class="bi bi-box-seam text-info me-2"></i>
+                            <small>Solo se actualiza el stock del <strong>Almacen General</strong></small>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

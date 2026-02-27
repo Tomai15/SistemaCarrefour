@@ -1,0 +1,169 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Export Catalogo{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <!-- Header con boton volver -->
+    <header class="row mb-4">
+        <div class="col-12 mb-3">
+            <a href="{% url 'home_catalogacion' %}" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left me-2"></i>
+                Volver al inicio
+            </a>
+        </div>
+        <div class="col-12">
+            <h1 class="display-5 fw-bold text-success">
+                <i class="bi bi-box-seam me-2"></i>
+                Export Catalogo
+            </h1>
+            <p class="text-muted">Exporta el catalogo completo de un seller con estado de FOTO, CATALOGADO y ACTIVO por cada SKU</p>
+        </div>
+    </header>
+
+    <!-- Mensajes de Django -->
+    {% if messages %}
+        <div class="row mb-4">
+            <div class="col-12">
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                        {% if message.tags == 'error' %}
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        {% elif message.tags == 'success' %}
+                            <i class="bi bi-check-circle-fill me-2"></i>
+                        {% elif message.tags == 'warning' %}
+                            <i class="bi bi-exclamation-circle-fill me-2"></i>
+                        {% else %}
+                            <i class="bi bi-info-circle-fill me-2"></i>
+                        {% endif %}
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    {% endif %}
+
+    <!-- Formulario -->
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-2">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-gear me-2"></i>
+                        Configuracion de Export
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <!-- Seller -->
+                        <div class="mb-4">
+                            <label class="form-label fs-5 fw-bold">
+                                <i class="bi bi-shop text-success me-2"></i>
+                                Seller
+                            </label>
+                            {{ form.seller }}
+                        </div>
+
+                        <!-- Sales Channels -->
+                        <div class="mb-4">
+                            <label class="form-label fs-5 fw-bold">
+                                <i class="bi bi-broadcast text-info me-2"></i>
+                                Sales Channels (opcional)
+                            </label>
+                            {{ form.sales_channels }}
+                            <div class="form-text">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Canales de venta (logica OR: al menos uno). Por defecto se verifican los canales 1 y 3.
+                            </div>
+                        </div>
+
+                        <!-- Incluir Precio y Stock -->
+                        <div class="mb-4">
+                            <div class="form-check form-switch">
+                                {{ form.incluir_precio_stock }}
+                                <label class="form-check-label fs-5 fw-bold" for="id_incluir_precio_stock">
+                                    <i class="bi bi-currency-dollar text-warning me-2"></i>
+                                    Incluir Precio y Stock
+                                </label>
+                            </div>
+                            <div class="form-text">
+                                <i class="bi bi-lightning-charge text-danger me-1"></i>
+                                Desactivado por defecto. Activar agrega ~560K llamadas extra y aumenta el tiempo significativamente.
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+                        <div class="d-flex gap-3">
+                            <button type="submit" class="btn btn-success btn-lg px-5 shadow">
+                                <i class="bi bi-play-fill me-2"></i>
+                                Empezar Export
+                            </button>
+                            <a href="{% url 'home_catalogacion' %}" class="btn btn-outline-secondary btn-lg px-4">
+                                <i class="bi bi-x-circle me-2"></i>
+                                Cancelar
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna lateral con informacion -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 bg-light">
+                <div class="card-body">
+                    <h6 class="fw-bold mb-3">
+                        <i class="bi bi-lightbulb text-warning me-2"></i>
+                        Informacion importante
+                    </h6>
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-3">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            <small>Se exportan <strong>todos los SKUs</strong> del seller con las <strong>52 columnas</strong> del export VTEX oficial</small>
+                        </li>
+                        <li class="mb-3">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            <small><strong>FOTO:</strong> SKU tiene al menos una imagen</small>
+                        </li>
+                        <li class="mb-3">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            <small><strong>ACTIVO:</strong> SKU activo + Producto activo + Visible en sitio + ShowWithoutStock + Sales Channel (OR) + Calidad (+ Precio + Stock si se activan)</small>
+                        </li>
+                        <li class="mb-3">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            <small><strong>CATALOGADO:</strong> ACTIVO + FOTO + tiene EAN</small>
+                        </li>
+                        <li class="mb-0">
+                            <i class="bi bi-clock text-warning me-2"></i>
+                            <small>El proceso puede demorar varios minutos dependiendo de la cantidad de SKUs</small>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 bg-light mt-3">
+                <div class="card-body">
+                    <h6 class="fw-bold mb-3">
+                        <i class="bi bi-table text-primary me-2"></i>
+                        Columnas del Excel
+                    </h6>
+                    <ul class="list-unstyled mb-0 small">
+                        <li class="mb-1"><strong>EAN, ACTIVO, FOTO, CATALOGADO</strong> - Columnas calculadas</li>
+                        <li class="mb-1"><strong>_IDSKU, _NombreSku, _SkuActivo</strong> - Datos del SKU</li>
+                        <li class="mb-1"><strong>_IDProducto, _NombreProducto</strong> - Datos del producto</li>
+                        <li class="mb-1"><strong>_MostrarEnSitio, _MostrarSinStock</strong> - Visibilidad</li>
+                        <li class="mb-1"><strong>_IDCategoria, _NombreCategoria</strong> - Categoria</li>
+                        <li class="mb-1"><strong>_IDMarca, _Marca</strong> - Marca</li>
+                        <li class="mb-1"><strong>_Tiendas</strong> - Politicas comerciales</li>
+                        <li class="mb-1"><strong>Dimensiones, descripciones, etc.</strong></li>
+                        <li class="mb-1 text-muted"><em>52 columnas oficiales + Motivo, Precio, Stock</em></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

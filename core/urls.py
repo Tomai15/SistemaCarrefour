@@ -61,6 +61,8 @@ urlpatterns = [
     path("catalogacion/sellers-no-carrefour/", views.sellers_no_carrefour_view, name="sellers_no_carrefour"),
     path("catalogacion/actualizar-modal/", views.actualizar_modal_view, name="actualizar_modal"),
     path("catalogacion/consulta-visibilidad/", views.consulta_visibilidad_view, name="consulta_visibilidad"),
+    path("catalogacion/export-catalogo/", views.export_catalogo_view, name="export_catalogo"),
+    path("catalogacion/carga-stock/", views.carga_stock_view, name="carga_stock"),
 
     # Plantillas de ejemplo
     path("plantilla/<str:tipo>/", views.descargar_plantilla, name="descargar_plantilla"),
