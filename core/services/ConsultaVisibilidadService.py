@@ -176,8 +176,8 @@ class ConsultaVisibilidadService:
         """Resuelve un EAN a SKU ID via la API de VTEX. Retorna None si no se encuentra."""
         try:
             respuesta = requests.get(
-                url=contexto.url_base_marketplace + "/api/catalog_system/pvt/sku/stockkeepingunitbyean/" + str(ean),
-                headers=contexto.headers_marketplace,
+                url=contexto.url_base_seller + "/api/catalog_system/pvt/sku/stockkeepingunitbyean/" + str(ean),
+                headers=contexto.headers_seller,
             )
             respuesta.raise_for_status()
             datos = respuesta.json()
