@@ -477,19 +477,12 @@ class ActualizarModalForm(forms.Form):
 class ExportCatalogoForm(forms.Form):
     seller = forms.ModelChoiceField(
         label="Seller",
-        queryset=SellerVtex.objects.all(),
+        required=False,
+        queryset=SellerVtex.objects.filter(marketplace__isnull=False),
         empty_label="Selecciona un seller",
         widget=forms.Select(attrs={'class': 'form-select'})
     )
-    sales_channels = forms.CharField(
-        label="Sales Channels a filtrar",
-        required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': '1, 3 (dejar vacio para verificar SC 1 y 3)'
-        }),
-        help_text='Canales de venta separados por coma. Se verifica que contenga AL MENOS UNO (logica OR). Por defecto: 1 y 3.'
-    )
+
     incluir_precio_stock = forms.BooleanField(
         label="Incluir Precio y Stock",
         required=False,

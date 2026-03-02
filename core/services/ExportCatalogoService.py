@@ -91,9 +91,13 @@ class ExportCatalogoService:
         if contexto is None:
             return
 
+        total_fases = 4 if incluir_precio_stock else 3
+        inicio_total = time.time()
+
         try:
             # Fase 0: Obtener todos los SKU IDs
-            self._log(tarea, "Fase 0: Obteniendo listado de SKU IDs...")
+            self._log(tarea, "Obteniendo listado de SKU IDs...")
+            t0 = time.time()
             sku_ids = self._obtener_todos_los_sku_ids(tarea, contexto)
             if not sku_ids:
                 self._log(tarea, "No se encontraron SKU IDs para este seller.")
@@ -101,15 +105,24 @@ class ExportCatalogoService:
                 return
 
             total_skus = len(sku_ids)
-            self._log(tarea, f"SKU IDs encontrados: {total_skus}")
+            self._log(tarea, f"{total_skus} SKU IDs encontrados ({time.time() - t0:.1f}s)")
 
             # Fase 1: Fetch todos los SKU details
-            self._log(tarea, f"Fase 1/{4 if incluir_precio_stock else 2}: Obteniendo detalles de {total_skus} SKUs ({CANTIDAD_WORKERS} workers)...")
+            self._log(tarea, f"[1/{total_fases}] Obteniendo detalles de {total_skus} SKUs...")
+            t0 = time.time()
             tarea.progreso_total = total_skus
             tarea.progreso_actual = 0
             tarea.save(update_fields=['progreso_total', 'progreso_actual'])
 
             detalles_skus = self._fase_fetch_skus(tarea, sku_ids, contexto)
+
+            skus_ok = sum(1 for d in detalles_skus if d is not None)
+            skus_error = total_skus - skus_ok
+            msg_fase1 = f"[1/{total_fases}] Completado: {skus_ok} SKUs obtenidos"
+            if skus_error:
+                msg_fase1 += f", {skus_error} con error"
+            msg_fase1 += f" ({time.time() - t0:.1f}s)"
+            self._log(tarea, msg_fase1)
 
             # Extraer IDs unicos de productos, categorias y marcas
             ids_productos = set()
@@ -130,7 +143,8 @@ class ExportCatalogoService:
 
             # Fase 2: Fetch productos unicos + categorias + marcas
             total_consultas = len(ids_productos) + len(ids_categorias) + len(ids_marcas)
-            self._log(tarea, f"Fase 2/{4 if incluir_precio_stock else 2}: {len(ids_productos)} productos, {len(ids_categorias)} categorias, {len(ids_marcas)} marcas unicos ({total_consultas} calls)...")
+            self._log(tarea, f"[2/{total_fases}] Obteniendo {len(ids_productos)} productos, {len(ids_categorias)} categorias, {len(ids_marcas)} marcas...")
+            t0 = time.time()
             tarea.progreso_total = total_consultas
             tarea.progreso_actual = 0
             tarea.save(update_fields=['progreso_total', 'progreso_actual'])
@@ -148,35 +162,46 @@ class ExportCatalogoService:
             # Fetch departamentos que no esten ya cacheados como categorias
             departamentos_nuevos = ids_departamentos - set(self._cache_categorias.keys())
             if departamentos_nuevos:
-                self._log(tarea, f"  + {len(departamentos_nuevos)} departamentos adicionales...")
                 self._fase_fetch_batch(
                     tarea, list(departamentos_nuevos),
                     lambda did: self._obtener_categoria(did, contexto)
                 )
 
+            self._log(tarea, f"[2/{total_fases}] Completado ({time.time() - t0:.1f}s)")
+
             # Fase 3 (opcional): Pricing + Stock
             precios: dict[int, float | None] = {}
             stocks: dict[int, int | None] = {}
             if incluir_precio_stock:
-                self._log(tarea, f"Fase 3/4: Obteniendo precio y stock de {total_skus} SKUs ({CANTIDAD_WORKERS} workers)...")
+                self._log(tarea, f"[3/{total_fases}] Obteniendo precio y stock de {total_skus} SKUs...")
+                t0 = time.time()
                 tarea.progreso_total = total_skus * 2
                 tarea.progreso_actual = 0
                 tarea.save(update_fields=['progreso_total', 'progreso_actual'])
                 precios, stocks = self._fase_fetch_precio_stock(tarea, sku_ids, contexto)
-            else:
-                self._log(tarea, "Precio/Stock omitido (no solicitado).")
 
-            # Fase 4: Construir resultados
-            fase_num = 4 if incluir_precio_stock else 3
-            self._log(tarea, f"Fase {fase_num}: Construyendo {total_skus} filas...")
+                sin_precio = sum(1 for v in precios.values() if v is None)
+                sin_stock = sum(1 for v in stocks.values() if v is not None and v <= 0)
+                self._log(tarea, f"[3/{total_fases}] Completado: {sin_precio} sin precio, {sin_stock} sin stock ({time.time() - t0:.1f}s)")
+
+            # Fase final: Construir resultados
+            fase_final = total_fases
+            self._log(tarea, f"[{fase_final}/{total_fases}] Generando Excel con {total_skus} filas...")
+            t0 = time.time()
             resultados = self._construir_resultados(
                 sku_ids, detalles_skus, precios, stocks, contexto, incluir_precio_stock
             )
 
+            # Contar resumen
+            activos = sum(1 for r in resultados if r.get('ACTIVO') == 'SI')
+            catalogados = sum(1 for r in resultados if r.get('CATALOGADO') == 'SI')
+
             # Generar Excel
             self._generar_excel(tarea, resultados)
             self._actualizar_estado(tarea, TareaCatalogacion.Estado.COMPLETADO)
-            self._log(tarea, f"Export finalizado. {total_skus} SKUs procesados.")
+
+            tiempo_total = time.time() - inicio_total
+            self._log(tarea, f"Export finalizado: {total_skus} SKUs, {activos} activos, {catalogados} catalogados ({tiempo_total:.0f}s total)")
         finally:
             contexto.session_marketplace.close()
             contexto.session_seller.close()
@@ -254,7 +279,7 @@ class ExportCatalogoService:
             if not datos:
                 break
             todos_los_ids.extend(datos)
-            self._log(tarea, f"Pagina {page}: {len(datos)} SKU IDs (total: {len(todos_los_ids)})")
+            logger.info(f"Pagina {page}: {len(datos)} SKU IDs (total: {len(todos_los_ids)})")
             if len(datos) < TAMANIO_PAGINA:
                 break
             page += 1
@@ -267,6 +292,10 @@ class ExportCatalogoService:
     ) -> list[dict | None]:
         """Fase 1: obtiene detalle de cada SKU via stockkeepingunitbyid."""
         detalles_skus: list[dict | None] = [None] * len(sku_ids)
+        total = len(sku_ids)
+        procesados = 0
+        errores = 0
+        siguiente_log = max(total // 5, 500)  # Log cada ~20% o cada 500
 
         def _obtener_detalle_sku(idx_skuid: tuple[int, int]) -> tuple[int, dict | None]:
             idx, sku_id = idx_skuid
@@ -282,10 +311,16 @@ class ExportCatalogoService:
                 try:
                     idx, datos = futuro.result()
                     detalles_skus[idx] = datos
+                    if datos is None:
+                        errores += 1
                 except Exception as e:
                     idx = futuros[futuro]
                     logger.error(f"Error fetch SKU idx {idx}: {e}")
+                    errores += 1
                 self._incrementar_progreso(tarea)
+                procesados += 1
+                if procesados % siguiente_log == 0:
+                    self._log(tarea, f"  {procesados}/{total} SKUs procesados...")
 
         self._flush_progreso(tarea)
         return detalles_skus
@@ -355,19 +390,27 @@ class ExportCatalogoService:
                 stocks[sku_id] = resultado
 
         # Intercalar precio y stock para distribuir la carga entre ambos endpoints
-        tareas: list[tuple] = []
+        tareas_ps: list[tuple] = []
         for sid in sku_ids:
-            tareas.append((_fetch_precio, sid))
-            tareas.append((_fetch_stock, sid))
+            tareas_ps.append((_fetch_precio, sid))
+            tareas_ps.append((_fetch_stock, sid))
+
+        total_ops = len(tareas_ps)
+        procesados = 0
+        siguiente_log = max(len(sku_ids) // 5, 500)  # Log cada ~20% de SKUs
 
         with ThreadPoolExecutor(max_workers=CANTIDAD_WORKERS) as pool:
-            futuros = [pool.submit(fn, arg) for fn, arg in tareas]
+            futuros = [pool.submit(fn, arg) for fn, arg in tareas_ps]
             for f in as_completed(futuros):
                 try:
                     f.result()
                 except Exception:
                     pass
                 self._incrementar_progreso(tarea)
+                procesados += 1
+                # Cada 2 ops = 1 SKU; loguear cada siguiente_log SKUs
+                if procesados % (siguiente_log * 2) == 0:
+                    self._log(tarea, f"  {procesados // 2}/{len(sku_ids)} SKUs precio/stock procesados...")
 
         self._flush_progreso(tarea)
         return precios, stocks

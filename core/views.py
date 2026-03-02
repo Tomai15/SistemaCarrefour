@@ -1295,25 +1295,27 @@ def export_catalogo_view(request: HttpRequest) -> HttpResponse:
     if request.method == 'POST':
         form = ExportCatalogoForm(request.POST)
         if form.is_valid():
-            seller = form.cleaned_data['seller']
-            sc_texto = form.cleaned_data.get('sales_channels', '').strip()
-
-            # Parsear sales channels
-            sales_channels_filtro = None
-            if sc_texto:
-                try:
-                    sales_channels_filtro = [int(x.strip()) for x in sc_texto.split(',') if x.strip()]
-                except ValueError:
-                    messages.error(request, "Los sales channels deben ser numeros separados por coma.")
-                    return render(request, template, {'form': form})
-
             incluir_precio_stock = form.cleaned_data.get('incluir_precio_stock', False)
+            seller = form.cleaned_data.get('seller')
+
+            if incluir_precio_stock and not seller:
+                messages.error(request, "Debes seleccionar un seller para incluir Precio y Stock.")
+                return render(request, template, {'form': form})
+
+            # Si no se necesita precio/stock, usar marketplace de produccion
+            if not seller:
+                seller = SellerVtex.objects.filter(
+                    marketplace__isnull=True
+                ).exclude(account_name__icontains='poc').first()
+                if not seller:
+                    messages.error(request, "No se encontro un marketplace de produccion configurado.")
+                    return render(request, template, {'form': form})
 
             tarea = TareaCatalogacion.objects.create(
                 tipo=TareaCatalogacion.TipoTarea.EXPORT_CATALOGO,
             )
 
-            async_task('core.tasks.export_catalogo_async', tarea.id, seller.id, sales_channels_filtro, incluir_precio_stock)
+            async_task('core.tasks.export_catalogo_async', tarea.id, seller.id, None, incluir_precio_stock)
 
             messages.success(request, f"Tarea #{tarea.id} creada. Exportando catalogo de {seller.nombre}.")
             return redirect('detalle_tarea_catalogacion', pk=tarea.id)

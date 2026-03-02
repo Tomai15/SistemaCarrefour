@@ -58,28 +58,6 @@
                     <form method="post">
                         {% csrf_token %}
 
-                        <!-- Seller -->
-                        <div class="mb-4">
-                            <label class="form-label fs-5 fw-bold">
-                                <i class="bi bi-shop text-success me-2"></i>
-                                Seller
-                            </label>
-                            {{ form.seller }}
-                        </div>
-
-                        <!-- Sales Channels -->
-                        <div class="mb-4">
-                            <label class="form-label fs-5 fw-bold">
-                                <i class="bi bi-broadcast text-info me-2"></i>
-                                Sales Channels (opcional)
-                            </label>
-                            {{ form.sales_channels }}
-                            <div class="form-text">
-                                <i class="bi bi-info-circle me-1"></i>
-                                Canales de venta (logica OR: al menos uno). Por defecto se verifican los canales 1 y 3.
-                            </div>
-                        </div>
-
                         <!-- Incluir Precio y Stock -->
                         <div class="mb-4">
                             <div class="form-check form-switch">
@@ -92,6 +70,19 @@
                             <div class="form-text">
                                 <i class="bi bi-lightning-charge text-danger me-1"></i>
                                 Desactivado por defecto. Activar agrega ~560K llamadas extra y aumenta el tiempo significativamente.
+                            </div>
+                        </div>
+
+                        <!-- Seller (solo visible si se activa Precio y Stock) -->
+                        <div class="mb-4" id="seller-container" style="display: none;">
+                            <label class="form-label fs-5 fw-bold">
+                                <i class="bi bi-shop text-success me-2"></i>
+                                Seller
+                            </label>
+                            {{ form.seller }}
+                            <div class="form-text">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Precio y stock se consultan desde el seller seleccionado.
                             </div>
                         </div>
 
@@ -166,4 +157,23 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const switchPrecioStock = document.getElementById('id_incluir_precio_stock');
+        const sellerContainer = document.getElementById('seller-container');
+
+        function toggleSeller() {
+            sellerContainer.style.display = switchPrecioStock.checked ? '' : 'none';
+            if (!switchPrecioStock.checked) {
+                document.getElementById('id_seller').value = '';
+            }
+        }
+
+        switchPrecioStock.addEventListener('change', toggleSeller);
+        toggleSeller();
+    });
+</script>
 {% endblock %}

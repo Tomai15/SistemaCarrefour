@@ -55,173 +55,74 @@
                     </h5>
                 </div>
                 <div class="card-body p-4">
-                    <!-- Tabs: EAN primero -->
-                    <ul class="nav nav-tabs mb-4" role="tablist">
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link {% if active_tab != 'sku' %}active{% endif %}" id="ean-tab"
-                                    data-bs-toggle="tab" data-bs-target="#ean-pane" type="button"
-                                    role="tab" aria-controls="ean-pane"
-                                    aria-selected="{% if active_tab != 'sku' %}true{% else %}false{% endif %}">
-                                <i class="bi bi-upc-scan me-1"></i>
-                                Por EAN
-                            </button>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link {% if active_tab == 'sku' %}active{% endif %}" id="sku-tab"
-                                    data-bs-toggle="tab" data-bs-target="#sku-pane" type="button"
-                                    role="tab" aria-controls="sku-pane"
-                                    aria-selected="{% if active_tab == 'sku' %}true{% else %}false{% endif %}">
-                                <i class="bi bi-upc me-1"></i>
-                                Por SKU ID
-                            </button>
-                        </li>
-                    </ul>
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        <input type="hidden" name="tipo" value="sku">
 
-                    <div class="tab-content">
-                        <!-- Tab: Por EAN -->
-                        <div class="tab-pane fade {% if active_tab != 'sku' %}show active{% endif %}" id="ean-pane" role="tabpanel">
-                            <form method="post" enctype="multipart/form-data">
-                                {% csrf_token %}
-                                <input type="hidden" name="tipo" value="ean">
-
-                                <!-- Metodo de carga -->
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Metodo de carga</label>
-                                    <div class="btn-group w-100" role="group">
-                                        <input type="radio" class="btn-check" name="metodo_ean" id="metodo_ean_texto" value="texto" checked
-                                               onchange="toggleMetodo('ean')">
-                                        <label class="btn btn-outline-danger" for="metodo_ean_texto">
-                                            <i class="bi bi-pencil me-1"></i> Escribir manualmente
-                                        </label>
-                                        <input type="radio" class="btn-check" name="metodo_ean" id="metodo_ean_excel" value="excel"
-                                               onchange="toggleMetodo('ean')">
-                                        <label class="btn btn-outline-danger" for="metodo_ean_excel">
-                                            <i class="bi bi-file-earmark-excel me-1"></i> Subir Excel
-                                        </label>
-                                    </div>
-                                </div>
-
-                                <!-- Textarea -->
-                                <div class="mb-4" id="ean_texto_container">
-                                    <label class="form-label fs-5 fw-bold">
-                                        <i class="bi bi-upc-scan text-primary me-2"></i>
-                                        EANs (uno por linea)
-                                    </label>
-                                    <textarea name="valores" class="form-control" rows="8"
-                                              placeholder="Ej:&#10;7790580511111&#10;7790580522222&#10;7790580533333"></textarea>
-                                </div>
-
-                                <!-- File upload -->
-                                <div class="mb-4 d-none" id="ean_excel_container">
-                                    <label class="form-label fs-5 fw-bold">
-                                        <i class="bi bi-file-earmark-excel text-success me-2"></i>
-                                        Archivo Excel con EANs
-                                    </label>
-                                    <input type="file" name="archivo_excel" class="form-control" accept=".xlsx">
-                                    <div class="form-text">
-                                        <i class="bi bi-info-circle me-1"></i>
-                                        El archivo debe tener una columna llamada "EAN".
-                                        <a href="{% url 'descargar_plantilla' tipo='visibilidad_ean' %}" class="text-decoration-none">
-                                            <i class="bi bi-download me-1"></i>Descargar plantilla
-                                        </a>
-                                    </div>
-                                </div>
-
-                                <!-- Seller -->
-                                <div class="mb-4">
-                                    <label class="form-label fs-5 fw-bold">
-                                        <i class="bi bi-shop text-success me-2"></i>
-                                        Seller
-                                    </label>
-                                    {{ form.seller }}
-                                </div>
-
-                                <hr class="my-4">
-                                <div class="d-flex gap-3">
-                                    <button type="submit" class="btn btn-danger btn-lg px-5 shadow">
-                                        <i class="bi bi-play-fill me-2"></i>
-                                        Empezar
-                                    </button>
-                                    <a href="{% url 'home_catalogacion' %}" class="btn btn-outline-secondary btn-lg px-4">
-                                        <i class="bi bi-x-circle me-2"></i>
-                                        Cancelar
-                                    </a>
-                                </div>
-                            </form>
+                        <!-- Metodo de carga -->
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Metodo de carga</label>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="metodo_sku" id="metodo_sku_texto" value="texto" checked
+                                       onchange="toggleMetodo('sku')">
+                                <label class="btn btn-outline-danger" for="metodo_sku_texto">
+                                    <i class="bi bi-pencil me-1"></i> Escribir manualmente
+                                </label>
+                                <input type="radio" class="btn-check" name="metodo_sku" id="metodo_sku_excel" value="excel"
+                                       onchange="toggleMetodo('sku')">
+                                <label class="btn btn-outline-danger" for="metodo_sku_excel">
+                                    <i class="bi bi-file-earmark-excel me-1"></i> Subir Excel
+                                </label>
+                            </div>
                         </div>
 
-                        <!-- Tab: Por SKU ID -->
-                        <div class="tab-pane fade {% if active_tab == 'sku' %}show active{% endif %}" id="sku-pane" role="tabpanel">
-                            <form method="post" enctype="multipart/form-data">
-                                {% csrf_token %}
-                                <input type="hidden" name="tipo" value="sku">
-
-                                <!-- Metodo de carga -->
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Metodo de carga</label>
-                                    <div class="btn-group w-100" role="group">
-                                        <input type="radio" class="btn-check" name="metodo_sku" id="metodo_sku_texto" value="texto" checked
-                                               onchange="toggleMetodo('sku')">
-                                        <label class="btn btn-outline-danger" for="metodo_sku_texto">
-                                            <i class="bi bi-pencil me-1"></i> Escribir manualmente
-                                        </label>
-                                        <input type="radio" class="btn-check" name="metodo_sku" id="metodo_sku_excel" value="excel"
-                                               onchange="toggleMetodo('sku')">
-                                        <label class="btn btn-outline-danger" for="metodo_sku_excel">
-                                            <i class="bi bi-file-earmark-excel me-1"></i> Subir Excel
-                                        </label>
-                                    </div>
-                                </div>
-
-                                <!-- Textarea -->
-                                <div class="mb-4" id="sku_texto_container">
-                                    <label class="form-label fs-5 fw-bold">
-                                        <i class="bi bi-upc text-primary me-2"></i>
-                                        SKU IDs (uno por linea)
-                                    </label>
-                                    <textarea name="valores" class="form-control" rows="8"
-                                              placeholder="Ej:&#10;12345&#10;67890&#10;11223"></textarea>
-                                </div>
-
-                                <!-- File upload -->
-                                <div class="mb-4 d-none" id="sku_excel_container">
-                                    <label class="form-label fs-5 fw-bold">
-                                        <i class="bi bi-file-earmark-excel text-success me-2"></i>
-                                        Archivo Excel con SKU IDs
-                                    </label>
-                                    <input type="file" name="archivo_excel" class="form-control" accept=".xlsx">
-                                    <div class="form-text">
-                                        <i class="bi bi-info-circle me-1"></i>
-                                        El archivo debe tener una columna llamada "SKU".
-                                        <a href="{% url 'descargar_plantilla' tipo='visibilidad_sku' %}" class="text-decoration-none">
-                                            <i class="bi bi-download me-1"></i>Descargar plantilla
-                                        </a>
-                                    </div>
-                                </div>
-
-                                <!-- Seller -->
-                                <div class="mb-4">
-                                    <label class="form-label fs-5 fw-bold">
-                                        <i class="bi bi-shop text-success me-2"></i>
-                                        Seller
-                                    </label>
-                                    {{ form.seller }}
-                                </div>
-
-                                <hr class="my-4">
-                                <div class="d-flex gap-3">
-                                    <button type="submit" class="btn btn-danger btn-lg px-5 shadow">
-                                        <i class="bi bi-play-fill me-2"></i>
-                                        Empezar
-                                    </button>
-                                    <a href="{% url 'home_catalogacion' %}" class="btn btn-outline-secondary btn-lg px-4">
-                                        <i class="bi bi-x-circle me-2"></i>
-                                        Cancelar
-                                    </a>
-                                </div>
-                            </form>
+                        <!-- Textarea -->
+                        <div class="mb-4" id="sku_texto_container">
+                            <label class="form-label fs-5 fw-bold">
+                                <i class="bi bi-upc text-primary me-2"></i>
+                                SKU IDs (uno por linea)
+                            </label>
+                            <textarea name="valores" class="form-control" rows="8"
+                                      placeholder="Ej:&#10;12345&#10;67890&#10;11223"></textarea>
                         </div>
-                    </div>
+
+                        <!-- File upload -->
+                        <div class="mb-4 d-none" id="sku_excel_container">
+                            <label class="form-label fs-5 fw-bold">
+                                <i class="bi bi-file-earmark-excel text-success me-2"></i>
+                                Archivo Excel con SKU IDs
+                            </label>
+                            <input type="file" name="archivo_excel" class="form-control" accept=".xlsx">
+                            <div class="form-text">
+                                <i class="bi bi-info-circle me-1"></i>
+                                El archivo debe tener una columna llamada "SKU".
+                                <a href="{% url 'descargar_plantilla' tipo='visibilidad_sku' %}" class="text-decoration-none">
+                                    <i class="bi bi-download me-1"></i>Descargar plantilla
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Seller -->
+                        <div class="mb-4">
+                            <label class="form-label fs-5 fw-bold">
+                                <i class="bi bi-shop text-success me-2"></i>
+                                Seller
+                            </label>
+                            {{ form.seller }}
+                        </div>
+
+                        <hr class="my-4">
+                        <div class="d-flex gap-3">
+                            <button type="submit" class="btn btn-danger btn-lg px-5 shadow">
+                                <i class="bi bi-play-fill me-2"></i>
+                                Empezar
+                            </button>
+                            <a href="{% url 'home_catalogacion' %}" class="btn btn-outline-secondary btn-lg px-4">
+                                <i class="bi bi-x-circle me-2"></i>
+                                Cancelar
+                            </a>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
@@ -237,11 +138,7 @@
                     <ul class="list-unstyled mb-0">
                         <li class="mb-3">
                             <i class="bi bi-check-circle text-success me-2"></i>
-                            <small><strong>Por EAN:</strong> Ingresa EANs manualmente o subi un Excel con columna "EAN"</small>
-                        </li>
-                        <li class="mb-3">
-                            <i class="bi bi-check-circle text-success me-2"></i>
-                            <small><strong>Por SKU ID:</strong> Ingresa SKU IDs manualmente o subi un Excel con columna "SKU"</small>
+                            <small>Ingresa SKU IDs manualmente o subi un Excel con columna "SKU"</small>
                         </li>
                         <li class="mb-3">
                             <i class="bi bi-check-circle text-success me-2"></i>
