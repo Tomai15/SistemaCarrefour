@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(du:*)",
+      "WebFetch(domain:docs.cloud.google.com)",
+      "WebSearch",
+      "WebFetch(domain:www.geeksforgeeks.org)"
+    ]
+  }
+}

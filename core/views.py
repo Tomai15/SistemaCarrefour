@@ -5,10 +5,11 @@ from typing import Any
 from django.shortcuts import render, get_object_or_404, redirect
 from django.views.generic import ListView, DetailView, View, DeleteView
 from django.views.generic.detail import SingleObjectMixin
-from django.http import FileResponse, Http404, HttpRequest, HttpResponse
+from django.http import FileResponse, Http404, HttpRequest, HttpResponse, JsonResponse
 import csv
 import io
 from django.urls import reverse_lazy
+from django.conf import settings
 from django.contrib import messages
 from django.db.models import Sum, Count, Q, QuerySet
 import os
@@ -1019,6 +1020,31 @@ class TareaCatalogacionDetailView(DetailView):
         if tarea.tipo == TareaCatalogacion.TipoTarea.CONSULTA_VISIBILIDAD:
             context['resultados_visibilidad'] = tarea.consultas_visibilidad.select_related('sku', 'seller').all()
         return context
+
+
+def estado_tarea_catalogacion_api(request: HttpRequest, pk: int) -> JsonResponse:
+    """Endpoint JSON para polling del estado de una tarea.
+
+    Lee del archivo temporal si existe (tarea en ejecucion), sino de la DB.
+    """
+    import json as _json
+
+    ruta_temporal = os.path.join(settings.MEDIA_ROOT, 'tmp', f'tarea_{pk}.json')
+    try:
+        with open(ruta_temporal, 'r', encoding='utf-8') as f:
+            datos = _json.load(f)
+        return JsonResponse(datos)
+    except (FileNotFoundError, _json.JSONDecodeError):
+        pass
+
+    tarea = get_object_or_404(TareaCatalogacion, pk=pk)
+    return JsonResponse({
+        'estado': tarea.estado,
+        'logs': tarea.logs,
+        'progreso_actual': tarea.progreso_actual,
+        'progreso_total': tarea.progreso_total,
+        'archivo_resultado': tarea.archivo_resultado.name if tarea.archivo_resultado else None,
+    })
 
 
 class TareaCatalogacionDeleteView(DeleteView):

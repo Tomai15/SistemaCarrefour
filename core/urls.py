@@ -53,6 +53,7 @@ urlpatterns = [
     # Catalogacion
     path("catalogacion/", views.TareaCatalogacionListView.as_view(), name="lista_tareas_catalogacion"),
     path("catalogacion/<int:pk>/", views.TareaCatalogacionDetailView.as_view(), name="detalle_tarea_catalogacion"),
+    path("catalogacion/<int:pk>/estado/", views.estado_tarea_catalogacion_api, name="estado_tarea_catalogacion_api"),
     path("catalogacion/<int:pk>/descargar/", views.descargar_resultado_tarea, name="descargar_resultado_tarea"),
     path("catalogacion/<int:pk>/eliminar/", views.TareaCatalogacionDeleteView.as_view(), name="eliminar_tarea_catalogacion"),
     path("catalogacion/busqueda-eans/", views.busqueda_eans_view, name="busqueda_eans"),

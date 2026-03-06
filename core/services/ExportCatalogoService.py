@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
 import logging
+import random
 import re
 import threading
 import time
@@ -10,10 +12,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from html import unescape
 
-import pandas as pd
 import requests
 from django.conf import settings
 from django.db import close_old_connections
+from openpyxl import Workbook
 
 from core.models import TareaCatalogacion, SellerVtex
 
@@ -22,7 +24,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 CANTIDAD_WORKERS = 100
 TAMANIO_PAGINA = 200
 REINTENTOS_MAXIMOS = 3
-ESPERA_ENTRE_REINTENTOS = 2  # segundos, se multiplica por numero de intento
+ESPERA_ENTRE_REINTENTOS = 2  # segundos base para backoff exponencial
 
 # Las 52 columnas del export oficial + extras utiles
 COLUMNAS_EXPORT = [
@@ -61,16 +63,17 @@ class _ContextoVtex:
 
 class ExportCatalogoService:
 
-    # Cada cuantos items se guarda el progreso en la BD (reduce I/O de disco)
     INTERVALO_PROGRESO = 200
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._cache_categorias: dict[str, dict] = {}
-        self._cache_marcas: dict[str, dict] = {}
-        self._cache_productos: dict[str, dict | None] = {}
-        self._cache_lock = threading.Lock()
         self._progreso_pendiente: int = 0
+        # Estado en memoria — se escribe a archivo temporal, no a DB
+        self._estado: str = ''
+        self._logs: str = ''
+        self._progreso_actual: int = 0
+        self._progreso_total: int = 0
+        self._ruta_temporal: str = ''
 
     # -- Metodo principal -----------------------------------------------------
 
@@ -87,14 +90,16 @@ class ExportCatalogoService:
         3. (Opcional) Obtener precio y stock de cada SKU
         4. Construir filas y generar Excel
         """
-        contexto = self._inicializar(tarea, seller_id, sales_channels_filtro)
-        if contexto is None:
-            return
-
-        total_fases = 4 if incluir_precio_stock else 3
-        inicio_total = time.time()
-
+        self._iniciar_estado_temporal(tarea)
+        contexto = None
         try:
+            contexto = self._inicializar(tarea, seller_id, sales_channels_filtro)
+            if contexto is None:
+                return
+
+            total_fases = 4 if incluir_precio_stock else 3
+            inicio_total = time.time()
+
             # Fase 0: Obtener todos los SKU IDs
             self._log(tarea, "Obteniendo listado de SKU IDs...")
             t0 = time.time()
@@ -110,9 +115,7 @@ class ExportCatalogoService:
             # Fase 1: Fetch todos los SKU details
             self._log(tarea, f"[1/{total_fases}] Obteniendo detalles de {total_skus} SKUs...")
             t0 = time.time()
-            tarea.progreso_total = total_skus
-            tarea.progreso_actual = 0
-            tarea.save(update_fields=['progreso_total', 'progreso_actual'])
+            self._set_progreso(total_skus, 0)
 
             detalles_skus = self._fase_fetch_skus(tarea, sku_ids, contexto)
 
@@ -124,48 +127,21 @@ class ExportCatalogoService:
             msg_fase1 += f" ({time.time() - t0:.1f}s)"
             self._log(tarea, msg_fase1)
 
-            # Extraer IDs unicos de productos, categorias y marcas
+            # Extraer IDs unicos de productos
             ids_productos = set()
-            ids_categorias = set()
-            ids_marcas = set()
             for ds in detalles_skus:
                 if ds is None:
                     continue
                 pid = ds.get('ProductId')
                 if pid:
                     ids_productos.add(str(pid))
-                cid = ds.get('CategoryId')
-                if cid:
-                    ids_categorias.add(str(cid))
-                bid = ds.get('BrandId')
-                if bid and not ds.get('BrandName'):
-                    ids_marcas.add(str(bid))
 
-            # Fase 2: Fetch productos unicos + categorias + marcas
-            total_consultas = len(ids_productos) + len(ids_categorias) + len(ids_marcas)
-            self._log(tarea, f"[2/{total_fases}] Obteniendo {len(ids_productos)} productos, {len(ids_categorias)} categorias, {len(ids_marcas)} marcas...")
+            # Fase 2: Fetch productos unicos (categorias y marcas salen del SKU, sin requests extra)
+            self._log(tarea, f"[2/{total_fases}] Obteniendo {len(ids_productos)} productos...")
             t0 = time.time()
-            tarea.progreso_total = total_consultas
-            tarea.progreso_actual = 0
-            tarea.save(update_fields=['progreso_total', 'progreso_actual'])
+            self._set_progreso(len(ids_productos), 0)
 
-            self._fase_fetch_lookups(tarea, ids_productos, ids_categorias, ids_marcas, contexto)
-
-            # Extraer IDs de departamentos de productos cacheados
-            ids_departamentos = set()
-            for pid in ids_productos:
-                prod = self._cache_productos.get(pid)
-                if prod:
-                    did = prod.get('DepartmentId')
-                    if did:
-                        ids_departamentos.add(str(did))
-            # Fetch departamentos que no esten ya cacheados como categorias
-            departamentos_nuevos = ids_departamentos - set(self._cache_categorias.keys())
-            if departamentos_nuevos:
-                self._fase_fetch_batch(
-                    tarea, list(departamentos_nuevos),
-                    lambda did: self._obtener_categoria(did, contexto)
-                )
+            productos = self._fase_fetch_productos(tarea, ids_productos, contexto)
 
             self._log(tarea, f"[2/{total_fases}] Completado ({time.time() - t0:.1f}s)")
 
@@ -175,22 +151,24 @@ class ExportCatalogoService:
             if incluir_precio_stock:
                 self._log(tarea, f"[3/{total_fases}] Obteniendo precio y stock de {total_skus} SKUs...")
                 t0 = time.time()
-                tarea.progreso_total = total_skus * 2
-                tarea.progreso_actual = 0
-                tarea.save(update_fields=['progreso_total', 'progreso_actual'])
+                self._set_progreso(total_skus * 2, 0)
                 precios, stocks = self._fase_fetch_precio_stock(tarea, sku_ids, contexto)
 
                 sin_precio = sum(1 for v in precios.values() if v is None)
                 sin_stock = sum(1 for v in stocks.values() if v is not None and v <= 0)
                 self._log(tarea, f"[3/{total_fases}] Completado: {sin_precio} sin precio, {sin_stock} sin stock ({time.time() - t0:.1f}s)")
 
-            # Fase final: Construir resultados
+            # Fase final: Construir resultados y generar Excel
             fase_final = total_fases
             self._log(tarea, f"[{fase_final}/{total_fases}] Generando Excel con {total_skus} filas...")
             t0 = time.time()
             resultados = self._construir_resultados(
-                sku_ids, detalles_skus, precios, stocks, contexto, incluir_precio_stock
+                sku_ids, detalles_skus, productos,
+                precios, stocks, contexto, incluir_precio_stock
             )
+
+            # Liberar memoria intermedia (ya no se necesitan)
+            del detalles_skus, productos, precios, stocks
 
             # Contar resumen
             activos = sum(1 for r in resultados if r.get('ACTIVO') == 'SI')
@@ -203,8 +181,10 @@ class ExportCatalogoService:
             tiempo_total = time.time() - inicio_total
             self._log(tarea, f"Export finalizado: {total_skus} SKUs, {activos} activos, {catalogados} catalogados ({tiempo_total:.0f}s total)")
         finally:
-            contexto.session_marketplace.close()
-            contexto.session_seller.close()
+            self._finalizar_estado(tarea)
+            if contexto:
+                contexto.session_marketplace.close()
+                contexto.session_seller.close()
 
     # -- Inicializacion de contexto -------------------------------------------
 
@@ -325,92 +305,63 @@ class ExportCatalogoService:
         self._flush_progreso(tarea)
         return detalles_skus
 
-    def _fase_fetch_lookups(
-        self, tarea: TareaCatalogacion,
-        product_ids: set[str], category_ids: set[str], brand_ids: set[str],
-        contexto: _ContextoVtex
-    ) -> None:
-        """Fase 2: obtiene productos, categorias y marcas unicos en un solo pool."""
+    def _fase_fetch_productos(
+        self, tarea: TareaCatalogacion, product_ids: set[str], contexto: _ContextoVtex
+    ) -> dict[str, dict | None]:
+        """Fase 2: obtiene datos de productos unicos."""
+        productos: dict[str, dict | None] = {}
 
-        def _fetch_producto(pid: str):
-            self._obtener_producto(pid, contexto)
-
-        def _fetch_categoria(cid: str):
-            self._obtener_categoria(cid, contexto)
-
-        def _fetch_marca(bid: str):
-            self._obtener_marca(bid, contexto)
-
-        # Armar lista de consultas heterogeneas (productos + categorias + marcas)
-        tareas: list[tuple] = []
-        for pid in product_ids:
-            tareas.append((_fetch_producto, pid))
-        for cid in category_ids:
-            tareas.append((_fetch_categoria, cid))
-        for bid in brand_ids:
-            tareas.append((_fetch_marca, bid))
+        def _fetch_producto(pid: str) -> tuple[str, dict | None]:
+            url = f"{contexto.url_base_marketplace}/api/catalog/pvt/product/{pid}"
+            return pid, self._request_con_retry(url, contexto.session_marketplace, silenciar_404=True)
 
         with ThreadPoolExecutor(max_workers=CANTIDAD_WORKERS) as pool:
-            futuros = [pool.submit(fn, arg) for fn, arg in tareas]
+            futuros = [pool.submit(_fetch_producto, pid) for pid in product_ids]
             for f in as_completed(futuros):
                 try:
-                    f.result()
+                    pid, datos = f.result()
+                    productos[pid] = datos
                 except Exception as e:
-                    logger.error(f"Error en lookup: {e}")
+                    logger.error(f"Error fetch producto: {e}")
                 self._incrementar_progreso(tarea)
         self._flush_progreso(tarea)
-
-    def _fase_fetch_batch(self, tarea: TareaCatalogacion, ids: list[str], fn) -> None:
-        """Obtiene datos en batch para IDs adicionales."""
-        with ThreadPoolExecutor(max_workers=CANTIDAD_WORKERS) as pool:
-            futuros = [pool.submit(fn, id_) for id_ in ids]
-            for f in as_completed(futuros):
-                try:
-                    f.result()
-                except Exception:
-                    pass
+        return productos
 
     def _fase_fetch_precio_stock(
         self, tarea: TareaCatalogacion, sku_ids: list[int], contexto: _ContextoVtex
     ) -> tuple[dict[int, float | None], dict[int, int | None]]:
-        """Fase 3: obtiene precio y stock de todos los SKUs."""
+        """Fase 3: obtiene precio y stock en dos pools paralelos."""
         precios: dict[int, float | None] = {}
         stocks: dict[int, int | None] = {}
-        precio_lock = threading.Lock()
-        stock_lock = threading.Lock()
 
-        def _fetch_precio(sku_id: int):
-            resultado = self._obtener_precio(sku_id, contexto)
-            with precio_lock:
-                precios[sku_id] = resultado
+        def _run_precios():
+            with ThreadPoolExecutor(max_workers=CANTIDAD_WORKERS // 2) as pool:
+                futuros = {pool.submit(self._obtener_precio, sid, contexto): sid for sid in sku_ids}
+                for f in as_completed(futuros):
+                    sid = futuros[f]
+                    try:
+                        precios[sid] = f.result()
+                    except Exception:
+                        precios[sid] = None
+                    self._incrementar_progreso(tarea)
 
-        def _fetch_stock(sku_id: int):
-            resultado = self._obtener_stock(sku_id, contexto)
-            with stock_lock:
-                stocks[sku_id] = resultado
+        def _run_stocks():
+            with ThreadPoolExecutor(max_workers=CANTIDAD_WORKERS // 2) as pool:
+                futuros = {pool.submit(self._obtener_stock, sid, contexto): sid for sid in sku_ids}
+                for f in as_completed(futuros):
+                    sid = futuros[f]
+                    try:
+                        stocks[sid] = f.result()
+                    except Exception:
+                        stocks[sid] = None
+                    self._incrementar_progreso(tarea)
 
-        # Intercalar precio y stock para distribuir la carga entre ambos endpoints
-        tareas_ps: list[tuple] = []
-        for sid in sku_ids:
-            tareas_ps.append((_fetch_precio, sid))
-            tareas_ps.append((_fetch_stock, sid))
-
-        total_ops = len(tareas_ps)
-        procesados = 0
-        siguiente_log = max(len(sku_ids) // 5, 500)  # Log cada ~20% de SKUs
-
-        with ThreadPoolExecutor(max_workers=CANTIDAD_WORKERS) as pool:
-            futuros = [pool.submit(fn, arg) for fn, arg in tareas_ps]
-            for f in as_completed(futuros):
-                try:
-                    f.result()
-                except Exception:
-                    pass
-                self._incrementar_progreso(tarea)
-                procesados += 1
-                # Cada 2 ops = 1 SKU; loguear cada siguiente_log SKUs
-                if procesados % (siguiente_log * 2) == 0:
-                    self._log(tarea, f"  {procesados // 2}/{len(sku_ids)} SKUs precio/stock procesados...")
+        hilo_precios = threading.Thread(target=_run_precios)
+        hilo_stocks = threading.Thread(target=_run_stocks)
+        hilo_precios.start()
+        hilo_stocks.start()
+        hilo_precios.join()
+        hilo_stocks.join()
 
         self._flush_progreso(tarea)
         return precios, stocks
@@ -419,10 +370,11 @@ class ExportCatalogoService:
 
     def _construir_resultados(
         self, sku_ids: list[int], detalles_skus: list[dict | None],
+        productos: dict[str, dict | None],
         precios: dict[int, float | None], stocks: dict[int, int | None],
         contexto: _ContextoVtex, incluir_precio_stock: bool = True,
     ) -> list[dict]:
-        """Fase final: combina datos de cache para armar las 52+ columnas por SKU."""
+        """Fase final: combina datos para armar las 52+ columnas por SKU."""
         resultados: list[dict] = []
 
         for i, sku_id in enumerate(sku_ids):
@@ -430,33 +382,30 @@ class ExportCatalogoService:
             if datos_sku is None:
                 resultados.append(self._resultado_error(sku_id, 'Error al consultar catalogo'))
                 continue
+            # EAN: buscar primero en ProductSpecifications (FieldId 979), fallback a AlternateIds/Ean
+            specs = datos_sku.get('ProductSpecifications') or []
+            spec_ean = next((s for s in specs if s.get('FieldId') == 979), None)
+            ean_de_spec = (spec_ean['FieldValues'][0] if spec_ean and spec_ean.get('FieldValues') else '')
 
             product_id = str(datos_sku.get('ProductId', '') or '')
-            ean = datos_sku.get('AlternateIds', {}).get('Ean', '') or datos_sku.get('Ean', '') or ''
-            category_id = str(datos_sku.get('CategoryId', '') or '')
+            ean = ean_de_spec or datos_sku.get('AlternateIds', {}).get('RefId', '') or datos_sku.get('Ean', '') or ''
             brand_id = str(datos_sku.get('BrandId', '') or '')
 
-            # Producto (de cache)
-            datos_prod = self._cache_productos.get(product_id) if product_id else None
+            # Producto
+            datos_prod = productos.get(product_id) if product_id else None
 
-            # Categoria (de cache)
-            nombre_categoria = ''
-            if category_id:
-                nombre_categoria = self._cache_categorias.get(category_id, {}).get('Name', '')
-            elif datos_prod and datos_prod.get('CategoryId'):
-                category_id = str(datos_prod['CategoryId'])
-                nombre_categoria = self._cache_categorias.get(category_id, {}).get('Name', '')
+            # Categoria: primera entrada de ProductCategories (la mas especifica)
+            prod_cats = datos_sku.get('ProductCategories') or {}
+            cat_items = list(prod_cats.items())
+            category_id = cat_items[0][0] if cat_items else ''
+            nombre_categoria = cat_items[0][1] if cat_items else ''
 
-            # Departamento (de cache)
-            department_id = str((datos_prod or {}).get('DepartmentId', '') or '')
-            nombre_departamento = ''
-            if department_id:
-                nombre_departamento = self._cache_categorias.get(department_id, {}).get('Name', '')
+            # Departamento: ultima entrada de ProductCategories (la mas general)
+            department_id = cat_items[-1][0] if cat_items else ''
+            nombre_departamento = cat_items[-1][1] if cat_items else ''
 
-            # Marca (de cache o de datos_sku)
+            # Marca (viene directo del SKU)
             nombre_marca = datos_sku.get('BrandName', '') or ''
-            if not nombre_marca and brand_id:
-                nombre_marca = self._cache_marcas.get(brand_id, {}).get('Name', '')
 
             # Precio y stock
             precio = precios.get(sku_id)
@@ -479,15 +428,15 @@ class ExportCatalogoService:
             dimension = datos_sku.get('Dimension', {}) if isinstance(datos_sku.get('Dimension'), dict) else {}
 
             resultados.append({
-                'EAN': str(ean),
+                'EAN': int(ean) if str(ean).isdigit() else ean,
                 'ACTIVO': 'SI' if activo else 'NO',
                 'FOTO': 'SI' if foto else 'NO',
                 'CATALOGADO': 'SI' if catalogado else 'NO',
-                '_IDSKU': str(sku_id),
+                '_IDSKU': int(sku_id),
                 '_NombreSku': datos_sku.get('NameComplete', '') or datos_sku.get('SkuName', ''),
                 '_ActivarSKUSiEsPosible': _si_no(datos_sku.get('ActivateIfPossible')),
                 '_SkuActivo': _si_no(datos_sku.get('IsActive')),
-                '_EANSKU': str(ean),
+                '_EANSKU': int(ean) if str(ean).isdigit() else ean,
                 '_Altura': _num(datos_sku.get('Height') or dimension.get('height')),
                 '_AlturaReal': _num(datos_sku.get('RealHeight') or dimension.get('realHeight')),
                 '_Anchura': _num(datos_sku.get('Width') or dimension.get('width')),
@@ -498,7 +447,7 @@ class ExportCatalogoService:
                 '_PesoReal': _num(datos_sku.get('RealWeight') or dimension.get('realWeight')),
                 '_UnidadMedida': str(datos_sku.get('MeasurementUnit', '') or ''),
                 '_MultiplicadorUnidad': _num(datos_sku.get('UnitMultiplier')),
-                '_CodigoReferenciaSKU': str(datos_sku.get('RefId', '') or ''),
+                '_CodigoReferenciaSKU':  int(ean) if str(ean).isdigit() else ean,
                 '_ValorFidelidad': _num(datos_sku.get('RewardValue')),
                 '_FechaEstimadaLlegada': str(datos_sku.get('EstimatedDateArrival', '') or ''),
                 '_CodigoFabricante': str(datos_sku.get('ManufacturerCode', '') or ''),
@@ -601,40 +550,6 @@ class ExportCatalogoService:
         activo = len(motivos) == 0
         return activo, ', '.join(motivos)
 
-    # -- Consultas con cache --------------------------------------------------
-
-    def _obtener_producto(self, product_id: str, contexto: _ContextoVtex) -> dict | None:
-        with self._cache_lock:
-            if product_id in self._cache_productos:
-                return self._cache_productos[product_id]
-        url = f"{contexto.url_base_marketplace}/api/catalog/pvt/product/{product_id}"
-        datos = self._request_con_retry(url, contexto.session_marketplace, silenciar_404=True)
-        with self._cache_lock:
-            self._cache_productos[product_id] = datos
-        return datos
-
-    def _obtener_categoria(self, category_id: str, contexto: _ContextoVtex) -> dict:
-        with self._cache_lock:
-            if category_id in self._cache_categorias:
-                return self._cache_categorias[category_id]
-        url = f"{contexto.url_base_marketplace}/api/catalog/pvt/category/{category_id}"
-        datos = self._request_con_retry(url, contexto.session_marketplace, silenciar_404=True)
-        resultado = datos if datos else {'Name': '', 'Id': category_id}
-        with self._cache_lock:
-            self._cache_categorias[category_id] = resultado
-        return resultado
-
-    def _obtener_marca(self, brand_id: str, contexto: _ContextoVtex) -> dict:
-        with self._cache_lock:
-            if brand_id in self._cache_marcas:
-                return self._cache_marcas[brand_id]
-        url = f"{contexto.url_base_marketplace}/api/catalog_system/pvt/brand/{brand_id}"
-        datos = self._request_con_retry(url, contexto.session_marketplace, silenciar_404=True)
-        resultado = datos if datos else {'Name': '', 'Id': brand_id}
-        with self._cache_lock:
-            self._cache_marcas[brand_id] = resultado
-        return resultado
-
     # -- Precio y stock -------------------------------------------------------
 
     def _obtener_precio(self, sku_id: int, contexto: _ContextoVtex) -> float | None:
@@ -658,14 +573,16 @@ class ExportCatalogoService:
     # -- HTTP con reintentos --------------------------------------------------
 
     def _request_con_retry(
-        self, url: str, session: requests.Session, silenciar_404: bool = False
+        self, url: str, session: requests.Session, silenciar_404: bool = False,
+        info_error: list | None = None,
     ) -> dict | list | None:
+        """Hace GET con reintentos. Si se pasa info_error (lista), appendea el motivo del fallo."""
         for intento in range(1, REINTENTOS_MAXIMOS + 1):
             try:
                 resp = session.get(url=url, timeout=30)
                 if resp.status_code == 429:
-                    wait = ESPERA_ENTRE_REINTENTOS * intento
-                    logger.warning(f"429 en {url}, esperando {wait}s ({intento}/{REINTENTOS_MAXIMOS})")
+                    wait = ESPERA_ENTRE_REINTENTOS * (2 ** (intento - 1)) + random.uniform(0, 1)
+                    logger.warning(f"429 en {url}, esperando {wait:.1f}s ({intento}/{REINTENTOS_MAXIMOS})")
                     time.sleep(wait)
                     continue
                 if resp.status_code == 404 and silenciar_404:
@@ -674,13 +591,26 @@ class ExportCatalogoService:
                 return resp.json()
             except requests.exceptions.HTTPError as e:
                 if intento < REINTENTOS_MAXIMOS:
-                    time.sleep(ESPERA_ENTRE_REINTENTOS * intento)
+                    wait = ESPERA_ENTRE_REINTENTOS * (2 ** (intento - 1)) + random.uniform(0, 1)
+                    time.sleep(wait)
                     continue
                 logger.error(f"HTTP error {url}: {e}")
+                if info_error is not None:
+                    info_error.append(f"HTTP {resp.status_code}")
                 return None
             except Exception as e:
+                if intento < REINTENTOS_MAXIMOS:
+                    wait = ESPERA_ENTRE_REINTENTOS * (2 ** (intento - 1)) + random.uniform(0, 1)
+                    logger.warning(f"Error {url}: {e}, reintentando en {wait:.1f}s ({intento}/{REINTENTOS_MAXIMOS})")
+                    time.sleep(wait)
+                    continue
                 logger.error(f"Error {url}: {e}")
+                if info_error is not None:
+                    info_error.append(str(e))
                 return None
+        # Agoto reintentos (tipicamente por 429 consecutivos)
+        if info_error is not None:
+            info_error.append(f"429 x{REINTENTOS_MAXIMOS}")
         return None
 
     # -- Utilidades -----------------------------------------------------------
@@ -701,44 +631,96 @@ class ExportCatalogoService:
         os.makedirs(directorio, exist_ok=True)
         ruta_final = os.path.join(directorio, nombre)
 
-        df = pd.DataFrame(resultados, columns=COLUMNAS_EXPORT)
-        str_cols = df.select_dtypes(include=['object']).columns
-        for col in str_cols:
-            df[col] = df[col].apply(lambda v: _limpiar_para_excel(v) if isinstance(v, str) else v)
-        df.to_excel(ruta_final, index=False)
+        wb = Workbook(write_only=True)
+        ws = wb.create_sheet()
+        ws.append(COLUMNAS_EXPORT)
+        for fila in resultados:
+            valores = []
+            for col in COLUMNAS_EXPORT:
+                v = fila.get(col, '')
+                if isinstance(v, str):
+                    v = _limpiar_para_excel(v)
+                valores.append(v)
+            ws.append(valores)
+        wb.save(ruta_final)
 
+        # Solo setear en memoria, se guarda a DB en _finalizar_estado
         tarea.archivo_resultado = os.path.join(directorio_relativo, nombre)
-        tarea.save(update_fields=['archivo_resultado'])
         self._log(tarea, f"Excel generado: {nombre}")
 
+    # -- Estado temporal (archivo JSON en vez de DB) --------------------------
+
+    def _iniciar_estado_temporal(self, tarea: TareaCatalogacion) -> None:
+        """Crea el archivo JSON temporal para esta tarea."""
+        directorio = os.path.join(settings.MEDIA_ROOT, 'tmp')
+        os.makedirs(directorio, exist_ok=True)
+        self._ruta_temporal = os.path.join(directorio, f'tarea_{tarea.id}.json')
+        self._estado = tarea.estado
+        self._logs = tarea.logs or ''
+        self._progreso_actual = 0
+        self._progreso_total = 0
+
+    def _escribir_estado_temporal(self) -> None:
+        """Escribe el estado actual a archivo JSON. Escritura atomica via rename."""
+        datos = {
+            'estado': self._estado,
+            'logs': self._logs,
+            'progreso_actual': self._progreso_actual,
+            'progreso_total': self._progreso_total,
+        }
+        ruta_tmp = self._ruta_temporal + '.tmp'
+        with open(ruta_tmp, 'w', encoding='utf-8') as f:
+            json.dump(datos, f)
+        os.replace(ruta_tmp, self._ruta_temporal)
+
+    def _finalizar_estado(self, tarea: TareaCatalogacion) -> None:
+        """Vuelca todo a DB en un solo save y elimina el archivo temporal."""
+        tarea.estado = self._estado
+        tarea.logs = self._logs
+        tarea.progreso_actual = self._progreso_actual
+        tarea.progreso_total = self._progreso_total
+        tarea.save()
+        try:
+            os.remove(self._ruta_temporal)
+        except OSError:
+            pass
+
     def _actualizar_estado(self, tarea: TareaCatalogacion, estado: str) -> None:
-        tarea.estado = estado
-        tarea.save(update_fields=['estado'])
+        with self._lock:
+            self._estado = estado
+            self._escribir_estado_temporal()
 
     def _log(self, tarea: TareaCatalogacion, mensaje: str) -> None:
         with self._lock:
-            tarea.refresh_from_db(fields=['logs'])
-            tarea.agregar_log(mensaje)
+            if self._logs:
+                self._logs += f"\n{mensaje}"
+            else:
+                self._logs = mensaje
+            self._escribir_estado_temporal()
+
+    def _set_progreso(self, total: int, actual: int) -> None:
+        """Setea progreso total/actual y escribe al archivo temporal."""
+        with self._lock:
+            self._progreso_total = total
+            self._progreso_actual = actual
+            self._progreso_pendiente = 0
+            self._escribir_estado_temporal()
 
     def _incrementar_progreso(self, tarea: TareaCatalogacion) -> None:
         with self._lock:
             self._progreso_pendiente += 1
             if self._progreso_pendiente >= self.INTERVALO_PROGRESO:
-                incremento = self._progreso_pendiente
+                self._progreso_actual += self._progreso_pendiente
                 self._progreso_pendiente = 0
-                tarea.refresh_from_db(fields=['progreso_actual'])
-                tarea.progreso_actual += incremento
-                tarea.save(update_fields=['progreso_actual'])
+                self._escribir_estado_temporal()
 
     def _flush_progreso(self, tarea: TareaCatalogacion) -> None:
         """Guarda el progreso pendiente que no alcanzo el intervalo."""
         with self._lock:
             if self._progreso_pendiente > 0:
-                incremento = self._progreso_pendiente
+                self._progreso_actual += self._progreso_pendiente
                 self._progreso_pendiente = 0
-                tarea.refresh_from_db(fields=['progreso_actual'])
-                tarea.progreso_actual += incremento
-                tarea.save(update_fields=['progreso_actual'])
+                self._escribir_estado_temporal()
 
 
 # -- Funciones auxiliares de formato ------------------------------------------

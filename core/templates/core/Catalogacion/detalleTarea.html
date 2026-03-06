@@ -20,12 +20,10 @@
             <p class="text-muted">Detalle y progreso de la tarea de catalogacion</p>
         </div>
         <div class="col-md-4 text-end d-flex align-items-center justify-content-end gap-2">
-            {% if tarea.archivo_resultado %}
-            <a href="{% url 'descargar_resultado_tarea' tarea.id %}" class="btn btn-success btn-lg shadow">
+            <a id="btn-descargar-top" href="{% url 'descargar_resultado_tarea' tarea.id %}" class="btn btn-success btn-lg shadow {% if not tarea.archivo_resultado %}d-none{% endif %}">
                 <i class="bi bi-file-earmark-arrow-down me-2"></i>
                 Descargar Resultado
             </a>
-            {% endif %}
             <a href="{% url 'eliminar_tarea_catalogacion' tarea.id %}" class="btn btn-outline-danger btn-lg">
                 <i class="bi bi-trash me-2"></i>
                 Eliminar
@@ -66,32 +64,14 @@
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card shadow-sm {% if tarea.estado == 'COMPLETADO' %}border-success{% elif tarea.estado == 'ERROR' %}border-danger{% elif tarea.estado == 'PROCESANDO' %}border-info{% else %}border-warning{% endif %}">
+            <div id="estado-card" class="card shadow-sm {% if tarea.estado == 'COMPLETADO' %}border-success{% elif tarea.estado == 'ERROR' %}border-danger{% elif tarea.estado == 'PROCESANDO' %}border-info{% else %}border-warning{% endif %}">
                 <div class="card-body">
                     <div class="d-flex align-items-center">
-                        {% if tarea.estado == 'PENDIENTE' %}
-                            <i class="bi bi-clock-history text-warning fs-1 me-3"></i>
-                        {% elif tarea.estado == 'PROCESANDO' %}
-                            <i class="bi bi-hourglass-split text-info fs-1 me-3"></i>
-                        {% elif tarea.estado == 'COMPLETADO' %}
-                            <i class="bi bi-check-circle text-success fs-1 me-3"></i>
-                        {% elif tarea.estado == 'ERROR' %}
-                            <i class="bi bi-exclamation-triangle text-danger fs-1 me-3"></i>
-                        {% endif %}
+                        <i id="estado-icon" class="fs-1 me-3 bi {% if tarea.estado == 'PENDIENTE' %}bi-clock-history text-warning{% elif tarea.estado == 'PROCESANDO' %}bi-hourglass-split text-info{% elif tarea.estado == 'COMPLETADO' %}bi-check-circle text-success{% elif tarea.estado == 'ERROR' %}bi-exclamation-triangle text-danger{% endif %}"></i>
                         <div>
                             <small class="text-muted d-block">Estado</small>
                             <h4 class="mb-0 fw-bold">
-                                {% if tarea.estado == 'PENDIENTE' %}
-                                    <span class="badge bg-warning text-dark fs-6">Pendiente</span>
-                                {% elif tarea.estado == 'PROCESANDO' %}
-                                    <span class="badge bg-info text-dark fs-6">Procesando</span>
-                                {% elif tarea.estado == 'COMPLETADO' %}
-                                    <span class="badge bg-success fs-6">Completado</span>
-                                {% elif tarea.estado == 'ERROR' %}
-                                    <span class="badge bg-danger fs-6">Error</span>
-                                {% else %}
-                                    <span class="badge bg-secondary fs-6">{{ tarea.estado }}</span>
-                                {% endif %}
+                                <span id="estado-badge" class="badge fs-6 {% if tarea.estado == 'PENDIENTE' %}bg-warning text-dark{% elif tarea.estado == 'PROCESANDO' %}bg-info text-dark{% elif tarea.estado == 'COMPLETADO' %}bg-success{% elif tarea.estado == 'ERROR' %}bg-danger{% else %}bg-secondary{% endif %}">{{ tarea.get_estado_display }}</span>
                             </h4>
                         </div>
                     </div>
@@ -109,20 +89,14 @@
             </h2>
         </header>
         <div class="card-body">
-            {% if tarea.progreso_total > 0 %}
-                {% widthratio tarea.progreso_actual tarea.progreso_total 100 as porcentaje %}
-            {% endif %}
             <div class="progress" style="height: 30px;">
-                <div class="progress-bar {% if tarea.estado == 'COMPLETADO' %}bg-success{% elif tarea.estado == 'PROCESANDO' %}bg-info progress-bar-striped progress-bar-animated{% elif tarea.estado == 'ERROR' %}bg-danger{% else %}bg-warning{% endif %} fs-6 fw-bold"
+                <div id="progress-bar" class="progress-bar fs-6 fw-bold {% if tarea.estado == 'COMPLETADO' %}bg-success{% elif tarea.estado == 'PROCESANDO' %}bg-info progress-bar-striped progress-bar-animated{% elif tarea.estado == 'ERROR' %}bg-danger{% else %}bg-warning{% endif %}"
                      role="progressbar"
-                     style="width: {% if tarea.progreso_total > 0 %}{{ porcentaje }}{% else %}0{% endif %}%"
-                     aria-valuenow="{{ tarea.progreso_actual }}"
-                     aria-valuemin="0"
-                     aria-valuemax="{{ tarea.progreso_total }}">
+                     style="width: {% widthratio tarea.progreso_actual tarea.progreso_total 100 %}%">
                     {{ tarea.progreso_actual }} / {{ tarea.progreso_total }}
                 </div>
             </div>
-            <p class="text-muted mt-2 mb-0">
+            <p id="progress-text" class="text-muted mt-2 mb-0">
                 {% if tarea.progreso_total > 0 %}
                     Progreso: {{ tarea.progreso_actual }} de {{ tarea.progreso_total }} ({% widthratio tarea.progreso_actual tarea.progreso_total 100 %}%)
                 {% else %}
@@ -141,7 +115,7 @@
             </h2>
         </header>
         <div class="card-body p-0">
-            <pre class="mb-0 p-3" style="max-height: 400px; overflow-y: auto; background-color: #1e1e1e; color: #d4d4d4; font-size: 0.85rem;">{{ tarea.logs|default:"Sin logs disponibles." }}</pre>
+            <pre id="logs-content" class="mb-0 p-3" style="max-height: 400px; overflow-y: auto; background-color: #1e1e1e; color: #d4d4d4; font-size: 0.85rem;">{{ tarea.logs|default:"Sin logs disponibles." }}</pre>
         </div>
     </section>
 
@@ -200,24 +174,93 @@
     {% endif %}
 
     <!-- Boton de descarga (tambien abajo para mayor visibilidad) -->
-    {% if tarea.archivo_resultado %}
-    <div class="text-center mb-4">
+    <div id="btn-descargar-bottom" class="text-center mb-4 {% if not tarea.archivo_resultado %}d-none{% endif %}">
         <a href="{% url 'descargar_resultado_tarea' tarea.id %}" class="btn btn-success btn-lg shadow px-5">
             <i class="bi bi-file-earmark-arrow-down me-2"></i>
             Descargar Resultado
         </a>
     </div>
-    {% endif %}
 </article>
 {% endblock %}
 
 {% block extra_js %}
 {% if tarea.estado == 'PENDIENTE' or tarea.estado == 'PROCESANDO' %}
 <script>
-    // Auto-refresh cada 5 segundos mientras la tarea esta en progreso
-    setTimeout(function() {
-        location.reload();
-    }, 5000);
+(function() {
+    const POLL_URL = '{% url "estado_tarea_catalogacion_api" tarea.id %}';
+    const POLL_INTERVAL = 5000;
+
+    const estadoCard = document.getElementById('estado-card');
+    const estadoIcon = document.getElementById('estado-icon');
+    const estadoBadge = document.getElementById('estado-badge');
+    const progressBar = document.getElementById('progress-bar');
+    const progressText = document.getElementById('progress-text');
+    const logsContent = document.getElementById('logs-content');
+    const btnDescargarTop = document.getElementById('btn-descargar-top');
+    const btnDescargarBottom = document.getElementById('btn-descargar-bottom');
+
+    const ESTADO_CONFIG = {
+        'PENDIENTE':  { border: 'border-warning', icon: 'bi-clock-history text-warning', badge: 'bg-warning text-dark', bar: 'bg-warning', label: 'Pendiente' },
+        'PROCESANDO': { border: 'border-info',    icon: 'bi-hourglass-split text-info',  badge: 'bg-info text-dark',    bar: 'bg-info progress-bar-striped progress-bar-animated', label: 'Procesando' },
+        'COMPLETADO': { border: 'border-success',  icon: 'bi-check-circle text-success',  badge: 'bg-success',           bar: 'bg-success', label: 'Completado' },
+        'ERROR':      { border: 'border-danger',   icon: 'bi-exclamation-triangle text-danger', badge: 'bg-danger',      bar: 'bg-danger',  label: 'Error' },
+    };
+
+    let intervalId = null;
+
+    function actualizarUI(data) {
+        const cfg = ESTADO_CONFIG[data.estado] || ESTADO_CONFIG['PENDIENTE'];
+
+        // Estado card
+        estadoCard.className = 'card shadow-sm ' + cfg.border;
+        estadoIcon.className = 'fs-1 me-3 bi ' + cfg.icon;
+        estadoBadge.className = 'badge fs-6 ' + cfg.badge;
+        estadoBadge.textContent = cfg.label;
+
+        // Progreso
+        const total = data.progreso_total || 0;
+        const actual = data.progreso_actual || 0;
+        const pct = total > 0 ? Math.round((actual / total) * 100) : 0;
+
+        progressBar.className = 'progress-bar fs-6 fw-bold ' + cfg.bar;
+        progressBar.style.width = pct + '%';
+        progressBar.textContent = actual + ' / ' + total;
+
+        if (total > 0) {
+            progressText.textContent = 'Progreso: ' + actual + ' de ' + total + ' (' + pct + '%)';
+        } else {
+            progressText.textContent = 'Sin progreso registrado';
+        }
+
+        // Logs (auto-scroll al final)
+        const pre = logsContent;
+        const wasAtBottom = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 20;
+        pre.textContent = data.logs || 'Sin logs disponibles.';
+        if (wasAtBottom) {
+            pre.scrollTop = pre.scrollHeight;
+        }
+
+        // Botones de descarga
+        if (data.archivo_resultado) {
+            btnDescargarTop.classList.remove('d-none');
+            btnDescargarBottom.classList.remove('d-none');
+        }
+
+        // Detener polling si terminó
+        if (data.estado === 'COMPLETADO' || data.estado === 'ERROR') {
+            clearInterval(intervalId);
+        }
+    }
+
+    function poll() {
+        fetch(POLL_URL)
+            .then(function(r) { return r.json(); })
+            .then(actualizarUI)
+            .catch(function(err) { console.error('Error polling estado:', err); });
+    }
+
+    intervalId = setInterval(poll, POLL_INTERVAL);
+})();
 </script>
 {% endif %}
 {% endblock %}
