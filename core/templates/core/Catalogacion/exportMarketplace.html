@@ -1,0 +1,239 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Export Marketplace{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <!-- Header con boton volver -->
+    <header class="row mb-4">
+        <div class="col-12 mb-3">
+            <a href="{% url 'home_catalogacion' %}" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left me-2"></i>
+                Volver al inicio
+            </a>
+        </div>
+        <div class="col-12">
+            <h1 class="display-5 fw-bold text-warning">
+                <i class="bi bi-shop-window me-2"></i>
+                Export Marketplace
+            </h1>
+            <p class="text-muted">Exporta productos de sellers externos integrados al marketplace</p>
+        </div>
+    </header>
+
+    <!-- Mensajes de Django -->
+    {% if messages %}
+        <div class="row mb-4">
+            <div class="col-12">
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                        {% if message.tags == 'error' %}
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        {% elif message.tags == 'success' %}
+                            <i class="bi bi-check-circle-fill me-2"></i>
+                        {% elif message.tags == 'warning' %}
+                            <i class="bi bi-exclamation-circle-fill me-2"></i>
+                        {% else %}
+                            <i class="bi bi-info-circle-fill me-2"></i>
+                        {% endif %}
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="row">
+        <div class="col-lg-8">
+            <!-- Sincronizar sellers -->
+            <div class="card shadow-sm border-2 mb-4">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-people me-2"></i>
+                        Sellers Externos ({{ sellers_externos.count }})
+                    </h5>
+                    <form method="post" action="{% url 'sincronizar_sellers' %}" class="d-inline">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-light btn-sm">
+                            <i class="bi bi-arrow-repeat me-1"></i>
+                            Sincronizar con VTEX
+                        </button>
+                    </form>
+                </div>
+                <div class="card-body p-3">
+                    {% if sellers_externos.count == 0 %}
+                        <div class="alert alert-info mb-0">
+                            <i class="bi bi-info-circle me-2"></i>
+                            No hay sellers externos en la base de datos. Presiona <strong>Sincronizar con VTEX</strong> para obtenerlos.
+                        </div>
+                    {% else %}
+                        <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Nombre</th>
+                                        <th>Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for s in sellers_externos %}
+                                    <tr>
+                                        <td><code>{{ s.seller_id }}</code></td>
+                                        <td>{{ s.nombre }}</td>
+                                        <td>
+                                            {% if s.is_active %}
+                                                <span class="badge bg-success">Activo</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">Inactivo</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Formulario de export -->
+            <div class="card shadow-sm border-2">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0">
+                        <i class="bi bi-gear me-2"></i>
+                        Configuracion de Export
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <!-- Todos los sellers -->
+                        <div class="mb-4">
+                            <div class="form-check form-switch">
+                                {{ form.todos_los_sellers }}
+                                <label class="form-check-label fs-5 fw-bold" for="id_todos_los_sellers">
+                                    <i class="bi bi-people-fill text-primary me-2"></i>
+                                    Exportar todos los sellers
+                                </label>
+                            </div>
+                            <div class="form-text">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Exporta los productos de todos los sellers externos activos.
+                            </div>
+                        </div>
+
+                        <!-- Seleccion individual de sellers -->
+                        <div class="mb-4" id="sellers-container" style="display: none;">
+                            <label class="form-label fs-5 fw-bold">
+                                <i class="bi bi-check2-square text-success me-2"></i>
+                                Seleccionar sellers
+                            </label>
+                            <div class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
+                                {% for seller in sellers_externos %}
+                                <div class="form-check mb-2">
+                                    <input type="checkbox" name="sellers" value="{{ seller.id }}"
+                                           class="form-check-input" id="seller_{{ seller.id }}">
+                                    <label class="form-check-label" for="seller_{{ seller.id }}">
+                                        {{ seller.nombre }}
+                                        <small class="text-muted">({{ seller.seller_id }})</small>
+                                        {% if seller.is_active %}
+                                            <span class="badge bg-success ms-1">Activo</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary ms-1">Inactivo</span>
+                                        {% endif %}
+                                    </label>
+                                </div>
+                                {% empty %}
+                                <p class="text-muted mb-0">No hay sellers disponibles. Sincroniza primero.</p>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+                        <div class="d-flex gap-3">
+                            <button type="submit" class="btn btn-warning btn-lg px-5 shadow">
+                                <i class="bi bi-play-fill me-2"></i>
+                                Empezar Export
+                            </button>
+                            <a href="{% url 'home_catalogacion' %}" class="btn btn-outline-secondary btn-lg px-4">
+                                <i class="bi bi-x-circle me-2"></i>
+                                Cancelar
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna lateral -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 bg-light">
+                <div class="card-body">
+                    <h6 class="fw-bold mb-3">
+                        <i class="bi bi-lightbulb text-warning me-2"></i>
+                        Informacion importante
+                    </h6>
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-3">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            <small>Exporta productos de <strong>sellers externos</strong> integrados al marketplace via la API de Offers</small>
+                        </li>
+                        <li class="mb-3">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            <small>Primero <strong>sincroniza</strong> los sellers desde VTEX para tener la lista actualizada</small>
+                        </li>
+                        <li class="mb-3">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            <small>Podes exportar <strong>todos los sellers</strong> o seleccionar sellers individuales</small>
+                        </li>
+                        <li class="mb-0">
+                            <i class="bi bi-clock text-warning me-2"></i>
+                            <small>El tiempo depende de la cantidad de sellers y productos</small>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 bg-light mt-3">
+                <div class="card-body">
+                    <h6 class="fw-bold mb-3">
+                        <i class="bi bi-table text-primary me-2"></i>
+                        Columnas del Excel
+                    </h6>
+                    <ul class="list-unstyled mb-0 small">
+                        <li class="mb-1"><strong>isActive</strong> - Estado del SKU</li>
+                        <li class="mb-1"><strong>IDSKU, NombreSku, EANSKU</strong> - Datos SKU</li>
+                        <li class="mb-1"><strong>IDProducto</strong> - ID del producto</li>
+                        <li class="mb-1"><strong>Departamento, Categoria</strong> - Clasificacion</li>
+                        <li class="mb-1"><strong>IDMarca, Marca</strong> - Marca</li>
+                        <li class="mb-1"><strong>PrecioLista, PrecioBase</strong> - Precios</li>
+                        <li class="mb-1"><strong>Stock</strong> - Cantidad disponible</li>
+                        <li class="mb-1"><strong>URLProducto, URLImg</strong> - Links</li>
+                        <li class="mb-1"><strong>NivelesCategoria</strong> - Arbol completo</li>
+                        <li class="mb-1"><strong>Cucardas, Ribbons</strong> - Etiquetas</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const switchTodos = document.getElementById('id_todos_los_sellers');
+        const sellersContainer = document.getElementById('sellers-container');
+
+        function toggleSellers() {
+            sellersContainer.style.display = switchTodos.checked ? 'none' : '';
+        }
+
+        switchTodos.addEventListener('change', toggleSellers);
+        toggleSellers();
+    });
+</script>
+{% endblock %}

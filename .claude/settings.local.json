@@ -4,7 +4,8 @@
       "Bash(du:*)",
       "WebFetch(domain:docs.cloud.google.com)",
       "WebSearch",
-      "WebFetch(domain:www.geeksforgeeks.org)"
+      "WebFetch(domain:www.geeksforgeeks.org)",
+      "Bash(python:*)"
     ]
   }
 }

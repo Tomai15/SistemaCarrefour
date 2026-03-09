@@ -431,6 +431,21 @@ def carga_stock_async(tarea_id: int, items: list, seller_id: int, headless: bool
         raise
 
 
+def export_marketplace_async(tarea_id: int, seller_ids: list[str] | None = None) -> int:
+    """Exporta offers de sellers externos del marketplace."""
+    logger.info(f"[Django-Q] Iniciando export marketplace para tarea #{tarea_id}")
+    try:
+        tarea = TareaCatalogacion.objects.get(id=tarea_id)
+        from core.services.ExportMarketplaceService import ExportMarketplaceService
+        servicio = ExportMarketplaceService()
+        servicio.ejecutar(tarea, seller_ids)
+        logger.info(f"[Django-Q] Tarea #{tarea_id} finalizada")
+        return tarea_id
+    except Exception as e:
+        logger.error(f"[Django-Q] Error en tarea #{tarea_id}: {e}", exc_info=True)
+        raise
+
+
 def consulta_visibilidad_ean_async(tarea_id: int, eans: list, seller_id: int) -> int:
     """Consulta de visibilidad de SKUs por EAN en un seller VTEX."""
     logger.info(f"[Django-Q] Iniciando consulta visibilidad por EAN para tarea #{tarea_id}")

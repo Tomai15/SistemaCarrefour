@@ -7,7 +7,7 @@ from django.core.exceptions import ValidationError
 from datetime import date
 from core.models import (
     UsuarioPayway, UsuarioCDP, ReporteVtex, ReportePayway, ReporteCDP, ReporteJanis,
-    TipoFiltroVtex, ValorFiltroVtex, UsuarioCarrefourWeb, SellerVtex
+    TipoFiltroVtex, ValorFiltroVtex, UsuarioCarrefourWeb, SellerVtex, SellerExterno
 )
 
 
@@ -543,4 +543,19 @@ class CargaStockForm(forms.Form):
         initial=True,
         widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         help_text='Se recomienda dejarlo activado ya que requiere login manual en VTEX admin.'
+    )
+
+
+class ExportMarketplaceForm(forms.Form):
+    sellers = forms.ModelMultipleChoiceField(
+        label="Sellers externos",
+        required=False,
+        queryset=SellerExterno.objects.all(),
+        widget=forms.CheckboxSelectMultiple(attrs={'class': 'form-check-input'}),
+    )
+    todos_los_sellers = forms.BooleanField(
+        label="Exportar todos los sellers",
+        required=False,
+        initial=True,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
     )

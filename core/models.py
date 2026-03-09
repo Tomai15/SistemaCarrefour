@@ -681,6 +681,7 @@ class TareaCatalogacion(models.Model):
         CONSULTA_VISIBILIDAD = 'CONSULTA_VISIBILIDAD', _('Consulta Visibilidad')
         EXPORT_CATALOGO = 'EXPORT_CATALOGO', _('Export Catalogo')
         CARGA_STOCK = 'CARGA_STOCK', _('Carga Stock')
+        EXPORT_MARKETPLACE = 'EXPORT_MARKETPLACE', _('Export Marketplace')
 
     tipo = models.CharField(max_length=30, choices=TipoTarea.choices)
     estado = models.CharField(max_length=15, choices=Estado.choices, default=Estado.PENDIENTE)
@@ -748,3 +749,21 @@ class ConsultaVisibilidad(models.Model):
     precio = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     tiene_imagenes = models.BooleanField(null=True, blank=True)
     fecha = models.DateTimeField(auto_now_add=True)
+
+
+class SellerExterno(models.Model):
+    """Seller externo integrado al marketplace, sincronizado desde la API de VTEX."""
+
+    seller_id = models.CharField(max_length=200, unique=True)
+    nombre = models.CharField(max_length=300)
+    is_active = models.BooleanField(default=True)
+    fecha_sincronizacion = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Seller Externo"
+        verbose_name_plural = "Sellers Externos"
+        ordering = ['nombre']
+
+    def __str__(self) -> str:
+        estado = "Activo" if self.is_active else "Inactivo"
+        return f"{self.nombre} ({self.seller_id}) - {estado}"

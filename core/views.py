@@ -20,7 +20,7 @@ from core.models import (
     ReportePayway, ReporteVtex, ReporteCDP, ReporteJanis, Cruce,
     UsuarioPayway, UsuarioCDP, UsuarioCarrefourWeb,
     ValorFiltroVtex, FiltroReporteVtex,
-    TareaCatalogacion, SellerVtex
+    TareaCatalogacion, SellerVtex, SellerExterno
 )
 from core.forms import (
     GenerarReportePaywayForm,
@@ -38,7 +38,8 @@ from core.forms import (
     ActualizarModalForm,
     ConsultaVisibilidadForm,
     ExportCatalogoForm,
-    CargaStockForm
+    CargaStockForm,
+    ExportMarketplaceForm
 )
 from datetime import date
 import csv
@@ -1418,6 +1419,67 @@ def carga_stock_view(request: HttpRequest) -> HttpResponse:
     else:
         form = CargaStockForm()
     return render(request, template, {'form': form})
+
+
+def export_marketplace_view(request: HttpRequest) -> HttpResponse:
+    template = 'core/Catalogacion/exportMarketplace.html'
+    sellers_externos = SellerExterno.objects.all()
+
+    if request.method == 'POST':
+        form = ExportMarketplaceForm(request.POST)
+        # Actualizar queryset del form con los sellers actuales
+        form.fields['sellers'].queryset = sellers_externos
+
+        if form.is_valid():
+            todos = form.cleaned_data.get('todos_los_sellers', False)
+            sellers_seleccionados = form.cleaned_data.get('sellers')
+
+            if not todos and not sellers_seleccionados:
+                messages.error(request, "Selecciona al menos un seller o marca 'Exportar todos'.")
+                return render(request, template, {'form': form, 'sellers_externos': sellers_externos})
+
+            seller_ids = None
+            if not todos and sellers_seleccionados:
+                seller_ids = [s.seller_id for s in sellers_seleccionados]
+
+            tarea = TareaCatalogacion.objects.create(
+                tipo=TareaCatalogacion.TipoTarea.EXPORT_MARKETPLACE,
+            )
+
+            async_task('core.tasks.export_marketplace_async', tarea.id, seller_ids)
+
+            label = "todos los sellers" if todos else f"{len(seller_ids)} seller(s)"
+            messages.success(request, f"Tarea #{tarea.id} creada. Exportando offers de {label}.")
+            return redirect('detalle_tarea_catalogacion', pk=tarea.id)
+        else:
+            return render(request, template, {'form': form, 'sellers_externos': sellers_externos})
+    else:
+        form = ExportMarketplaceForm()
+        form.fields['sellers'].queryset = sellers_externos
+    return render(request, template, {'form': form, 'sellers_externos': sellers_externos})
+
+
+def sincronizar_sellers_view(request: HttpRequest) -> HttpResponse:
+    if request.method != 'POST':
+        return redirect('export_marketplace')
+
+    marketplace = SellerVtex.objects.filter(
+        marketplace__isnull=True
+    ).exclude(account_name__icontains='poc').first()
+
+    if not marketplace:
+        messages.error(request, "No se encontro un marketplace de produccion configurado.")
+        return redirect('export_marketplace')
+
+    from core.services.ExportMarketplaceService import ExportMarketplaceService
+    try:
+        nuevos, actualizados = ExportMarketplaceService.sincronizar_sellers(marketplace)
+        total = SellerExterno.objects.count()
+        messages.success(request, f"Sincronizacion completada: {nuevos} nuevos, {actualizados} actualizados. Total: {total} sellers externos.")
+    except Exception as e:
+        messages.error(request, f"Error sincronizando sellers: {e}")
+
+    return redirect('export_marketplace')
 
 
 def _leer_columna_excel(archivo, columna_esperada: str) -> tuple[list[str], str | None]:
