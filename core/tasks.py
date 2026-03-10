@@ -258,7 +258,7 @@ def generar_reporte_janis_async(fecha_inicio: str, fecha_fin: str, reporte_id: i
         raise
 
 
-def generar_cruce_async(cruce_id: int, reporte_vtex_id: int | None = None, reporte_payway_id: int | None = None, reporte_cdp_id: int | None = None, reporte_janis_id: int | None = None) -> int:
+def generar_cruce_async(cruce_id: int, reporte_vtex_id: int | None = None, reporte_payway_id: int | None = None, reporte_cdp_id: int | None = None, reporte_janis_id: int | None = None, reporte_mercado_pago_id: int | None = None) -> int:
     """
     Genera un cruce de reportes de forma asíncrona.
 
@@ -270,6 +270,7 @@ def generar_cruce_async(cruce_id: int, reporte_vtex_id: int | None = None, repor
         reporte_payway_id (int, optional): ID del reporte Payway a incluir
         reporte_cdp_id (int, optional): ID del reporte CDP a incluir
         reporte_janis_id (int, optional): ID del reporte Janis a incluir
+        reporte_mercado_pago_id (int, optional): ID del reporte MercadoPago a incluir
 
     Returns:
         int: ID del cruce generado
@@ -283,7 +284,8 @@ def generar_cruce_async(cruce_id: int, reporte_vtex_id: int | None = None, repor
             reporte_vtex_id,
             reporte_payway_id,
             reporte_cdp_id,
-            reporte_janis_id
+            reporte_janis_id,
+            reporte_mercado_pago_id
         )
     """
     logger.info(f"[Django-Q] Iniciando generación asíncrona de cruce #{cruce_id}")
@@ -298,7 +300,8 @@ def generar_cruce_async(cruce_id: int, reporte_vtex_id: int | None = None, repor
             reporte_vtex_id,
             reporte_payway_id,
             reporte_cdp_id,
-            reporte_janis_id
+            reporte_janis_id,
+            reporte_mercado_pago_id
         )
 
         logger.info(f"[Django-Q] Cruce #{cruce_id} generado exitosamente")

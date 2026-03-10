@@ -17,7 +17,7 @@ import os
 from django_q.tasks import async_task
 
 from core.models import (
-    ReportePayway, ReporteVtex, ReporteCDP, ReporteJanis, Cruce,
+    ReportePayway, ReporteVtex, ReporteCDP, ReporteJanis, ReporteMercadoPago, Cruce,
     UsuarioPayway, UsuarioCDP, UsuarioCarrefourWeb,
     ValorFiltroVtex, FiltroReporteVtex,
     TareaCatalogacion, SellerVtex, SellerExterno
@@ -711,17 +711,22 @@ def exportar_cruce_excel(request: HttpRequest, pk: int) -> HttpResponse:
     - incluir_observaciones=1 (default): incluye columna resultado_cruce
     - incluir_precio_payway=1: incluye columnas monto_payway y monto_payway_2
     - incluir_precio_vtex=1: incluye columna valor_vtex
+    - incluir_diferencia=1: incluye columna diferencia (monto_payway - valor_vtex)
     """
     cruce = get_object_or_404(Cruce, pk=pk)
 
     incluir_observaciones = request.GET.get('incluir_observaciones') == '1'
     incluir_precio_payway = request.GET.get('incluir_precio_payway') == '1'
     incluir_precio_vtex = request.GET.get('incluir_precio_vtex') == '1'
+    incluir_diferencia = request.GET.get('incluir_diferencia') == '1'
+    incluir_precio_mercado_pago = request.GET.get('incluir_precio_mercado_pago') == '1'
 
     ruta_archivo = cruce.generar_reporter_excel(
         incluir_observaciones=incluir_observaciones,
         incluir_precio_payway=incluir_precio_payway,
-        incluir_precio_vtex=incluir_precio_vtex
+        incluir_precio_vtex=incluir_precio_vtex,
+        incluir_diferencia=incluir_diferencia,
+        incluir_precio_mercado_pago=incluir_precio_mercado_pago
     )
 
     if not os.path.exists(ruta_archivo):
@@ -738,6 +743,108 @@ def exportar_cruce_excel(request: HttpRequest, pk: int) -> HttpResponse:
     return response
 
 
+# =============================================================================
+# MERCADO PAGO
+# =============================================================================
+
+class reporteMercadoPagoListView(ListView):
+    model = ReporteMercadoPago
+    paginate_by = 50
+    template_name = 'core/MercadoPago/vistaReportes.html'
+    ordering = ['-id']
+
+
+class reporteMercadoPagoDetailView(SingleObjectMixin, ListView):
+    template_name = 'core/MercadoPago/detalleReporte.html'
+    paginate_by = 20
+
+    def get(self, request, *args, **kwargs):
+        self.object = self.get_object(queryset=ReporteMercadoPago.objects.all())
+        return super().get(request, *args, **kwargs)
+
+    def get_queryset(self):
+        return self.object.transacciones.all().order_by('-fecha_hora')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['reporte'] = self.object
+        return context
+
+
+def exportar_reporte_mercado_pago_excel(request: HttpRequest, pk: int) -> HttpResponse:
+    """Vista para exportar un reporte de MercadoPago a Excel."""
+    reporte = get_object_or_404(ReporteMercadoPago, pk=pk)
+    ruta_archivo = reporte.generar_reporter_excel()
+
+    if not os.path.exists(ruta_archivo):
+        raise Http404("El archivo no se generó correctamente")
+
+    nombre_archivo = os.path.basename(ruta_archivo)
+    response = FileResponse(
+        open(ruta_archivo, 'rb'),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{nombre_archivo}"'
+    return response
+
+
+def importar_reporte_mercado_pago_view(request: HttpRequest) -> HttpResponse:
+    """Vista para importar un reporte de MercadoPago desde un archivo Excel."""
+    if request.method == 'POST':
+        archivo = request.FILES.get('archivo_excel')
+        fecha_inicio_str = request.POST.get('fecha_inicio')
+        fecha_fin_str = request.POST.get('fecha_fin')
+
+        if not archivo:
+            messages.error(request, 'Debe seleccionar un archivo Excel.')
+            return redirect('lista_reportes_mercado_pago')
+
+        if not fecha_inicio_str or not fecha_fin_str:
+            messages.error(request, 'Debe ingresar las fechas de inicio y fin.')
+            return redirect('lista_reportes_mercado_pago')
+
+        if not archivo.name.endswith(('.xlsx', '.xls')):
+            messages.error(request, 'El archivo debe ser un Excel (.xlsx o .xls).')
+            return redirect('lista_reportes_mercado_pago')
+
+        try:
+            from datetime import datetime
+            fecha_inicio = datetime.strptime(fecha_inicio_str, '%Y-%m-%d').date()
+            fecha_fin = datetime.strptime(fecha_fin_str, '%Y-%m-%d').date()
+
+            if fecha_inicio > fecha_fin:
+                messages.error(request, 'La fecha de inicio no puede ser posterior a la fecha de fin.')
+                return redirect('lista_reportes_mercado_pago')
+
+            nuevo_reporte = ReporteMercadoPago.objects.create(
+                fecha_inicio=fecha_inicio,
+                fecha_fin=fecha_fin,
+                estado=ReporteMercadoPago.Estado.PROCESANDO
+            )
+
+            from core.services.ReporteMercadoPagoService import ReporteMercadoPagoService
+            servicio = ReporteMercadoPagoService()
+            cantidad = servicio.importar_desde_excel(archivo, nuevo_reporte)
+
+            nuevo_reporte.estado = ReporteMercadoPago.Estado.COMPLETADO
+            nuevo_reporte.save()
+
+            messages.success(
+                request,
+                f'Reporte importado exitosamente. {cantidad} transacciones procesadas.'
+            )
+            return redirect('lista_reportes_mercado_pago')
+
+        except Exception as e:
+            messages.error(request, f'Error al importar el archivo: {str(e)}')
+            if 'nuevo_reporte' in locals():
+                nuevo_reporte.estado = ReporteMercadoPago.Estado.ERROR
+                nuevo_reporte.save()
+            return redirect('lista_reportes_mercado_pago')
+
+    return render(request, 'core/MercadoPago/importarReporte.html')
+
+
 def generar_cruce_view(request: HttpRequest) -> HttpResponse:
     """
     Vista para generar un nuevo cruce de reportes.
@@ -752,6 +859,7 @@ def generar_cruce_view(request: HttpRequest) -> HttpResponse:
             reporte_payway = form.cleaned_data.get('reporte_payway')
             reporte_cdp = form.cleaned_data.get('reporte_cdp')
             reporte_janis = form.cleaned_data.get('reporte_janis')
+            reporte_mercado_pago = form.cleaned_data.get('reporte_mercado_pago')
 
             # Determinar fecha_inicio y fecha_fin basándose en los reportes seleccionados
             fechas_inicio = []
@@ -769,6 +877,9 @@ def generar_cruce_view(request: HttpRequest) -> HttpResponse:
             if reporte_janis:
                 fechas_inicio.append(reporte_janis.fecha_inicio)
                 fechas_fin.append(reporte_janis.fecha_fin)
+            if reporte_mercado_pago:
+                fechas_inicio.append(reporte_mercado_pago.fecha_inicio)
+                fechas_fin.append(reporte_mercado_pago.fecha_fin)
 
             # Usar la fecha más temprana como inicio y la más tardía como fin
             fecha_inicio = min(fechas_inicio)
@@ -782,7 +893,8 @@ def generar_cruce_view(request: HttpRequest) -> HttpResponse:
                 reporte_vtex=reporte_vtex,
                 reporte_payway=reporte_payway,
                 reporte_cdp=reporte_cdp,
-                reporte_janis=reporte_janis
+                reporte_janis=reporte_janis,
+                reporte_mercado_pago=reporte_mercado_pago
             )
 
             # Encolar tarea en Django-Q
@@ -793,7 +905,8 @@ def generar_cruce_view(request: HttpRequest) -> HttpResponse:
                     reporte_vtex.id if reporte_vtex else None,
                     reporte_payway.id if reporte_payway else None,
                     reporte_cdp.id if reporte_cdp else None,
-                    reporte_janis.id if reporte_janis else None
+                    reporte_janis.id if reporte_janis else None,
+                    reporte_mercado_pago.id if reporte_mercado_pago else None
                 )
 
                 messages.success(
@@ -954,6 +1067,12 @@ class ReporteJanisDeleteView(ReporteDeleteMixin, DeleteView):
     success_url = reverse_lazy('lista_reportes_janis')
 
 
+# --- MERCADOPAGO ---
+class ReporteMercadoPagoDeleteView(ReporteDeleteMixin, DeleteView):
+    model = ReporteMercadoPago
+    success_url = reverse_lazy('lista_reportes_mercado_pago')
+
+
 # --- CRUCES ---
 class CruceRetryView(View):
     """
@@ -979,7 +1098,8 @@ class CruceRetryView(View):
                 cruce.reporte_vtex.id if cruce.reporte_vtex else None,
                 cruce.reporte_payway.id if cruce.reporte_payway else None,
                 cruce.reporte_cdp.id if cruce.reporte_cdp else None,
-                cruce.reporte_janis.id if cruce.reporte_janis else None
+                cruce.reporte_janis.id if cruce.reporte_janis else None,
+                cruce.reporte_mercado_pago.id if cruce.reporte_mercado_pago else None
             )
             messages.success(request, f'Cruce #{cruce.id} encolado para reintento.')
         except Exception as e:

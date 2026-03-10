@@ -73,7 +73,10 @@ def get_local_version():
     """Obtiene la versión local desde un archivo VERSION o el commit hash."""
     version_file = Path(__file__).parent / "VERSION"
     if version_file.exists():
-        return version_file.read_text().strip()
+        version = version_file.read_text().strip()
+        print_status(f"Versión local (VERSION): {version}", "info")
+        return version
+    print_status("No existe archivo VERSION (primera ejecución o instalación manual)", "info")
     return None
 
 
@@ -85,13 +88,24 @@ def save_local_version(version):
 
 def get_github_latest_commit():
     """Obtiene el SHA del último commit en GitHub."""
+    api_url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/commits/{GITHUB_BRANCH}"
     try:
-        api_url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/commits/{GITHUB_BRANCH}"
+        print_status(f"Consultando GitHub API: {api_url}", "info")
         req = urllib.request.Request(api_url, headers={"User-Agent": "CruceBotSupremo"})
         with urllib.request.urlopen(req, timeout=15) as response:
+            status_code = response.getcode()
             data = json.loads(response.read().decode())
-            return data.get("sha", "")[:12]  # Primeros 12 caracteres del SHA
-    except Exception:
+            sha = data.get("sha", "")[:12]
+            print_status(f"GitHub API respondió OK (HTTP {status_code}), último commit: {sha}", "success")
+            return sha
+    except urllib.error.HTTPError as e:
+        print_status(f"GitHub API error HTTP {e.code}: {e.reason}", "error")
+        return None
+    except urllib.error.URLError as e:
+        print_status(f"No se pudo conectar a GitHub: {e.reason}", "error")
+        return None
+    except Exception as e:
+        print_status(f"Error inesperado consultando GitHub: {type(e).__name__}: {e}", "error")
         return None
 
 
@@ -167,27 +181,56 @@ def update_from_github_zip():
 
 def check_for_updates_git():
     """Intenta actualizar usando git. Retorna True si tuvo éxito, False si git no está disponible."""
+    project_dir = Path(__file__).parent
     try:
         # Verificar si git está disponible
         result = subprocess.run(
             ["git", "--version"],
             capture_output=True,
             text=True,
-            cwd=Path(__file__).parent
+            cwd=project_dir
         )
         if result.returncode != 0:
-            return False  # Git no disponible
+            print_status("git --version falló", "warning")
+            return False
+
+        git_version = result.stdout.strip()
+        print_status(f"Git disponible: {git_version}", "info")
+
+        # Verificar si estamos en un repositorio git
+        result = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            capture_output=True,
+            text=True,
+            cwd=project_dir
+        )
+        if result.returncode != 0:
+            print_status(f"No es un repositorio git: {result.stderr.strip()}", "warning")
+            return False
+
+        # Verificar si hay un remote configurado
+        result = subprocess.run(
+            ["git", "remote", "-v"],
+            capture_output=True,
+            text=True,
+            cwd=project_dir
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            print_status("No hay remote configurado en git", "warning")
+            return False
+        print_status(f"Remote: {result.stdout.strip().splitlines()[0]}", "info")
 
         # Fetch para obtener los cambios remotos
+        print_status("Ejecutando git fetch...", "info")
         result = subprocess.run(
             ["git", "fetch"],
             capture_output=True,
             text=True,
-            cwd=Path(__file__).parent,
+            cwd=project_dir,
             timeout=30
         )
         if result.returncode != 0:
-            print_status("No se pudo conectar al repositorio", "warning")
+            print_status(f"git fetch falló: {result.stderr.strip()}", "warning")
             return True  # Git disponible pero sin conexión
 
         # Obtener la rama actual
@@ -195,16 +238,17 @@ def check_for_updates_git():
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             capture_output=True,
             text=True,
-            cwd=Path(__file__).parent
+            cwd=project_dir
         )
         current_branch = result.stdout.strip() if result.returncode == 0 else "main"
+        print_status(f"Rama actual: {current_branch}", "info")
 
         # Comparar commits
         result = subprocess.run(
             ["git", "rev-parse", "HEAD"],
             capture_output=True,
             text=True,
-            cwd=Path(__file__).parent
+            cwd=project_dir
         )
         local_commit = result.stdout.strip() if result.returncode == 0 else ""
 
@@ -212,53 +256,73 @@ def check_for_updates_git():
             ["git", "rev-parse", f"origin/{current_branch}"],
             capture_output=True,
             text=True,
-            cwd=Path(__file__).parent
+            cwd=project_dir
         )
         remote_commit = result.stdout.strip() if result.returncode == 0 else ""
+
+        print_status(f"Commit local:  {local_commit[:12]}", "info")
+        print_status(f"Commit remoto: {remote_commit[:12]}", "info")
 
         if local_commit == remote_commit:
             print_status("Ya tienes la última versión", "success")
             return True
 
+        # Verificar si hay cambios locales que podrían impedir el pull
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            cwd=project_dir
+        )
+        if result.stdout.strip():
+            cambios = len(result.stdout.strip().splitlines())
+            print_status(f"Hay {cambios} archivo(s) con cambios locales", "warning")
+
         # Hay actualizaciones disponibles
         print_status(f"Actualizaciones disponibles en {current_branch}", "info")
-        print_status("Descargando actualizaciones...", "info")
+        print_status("Descargando actualizaciones con git pull...", "info")
 
-        # Hacer git pull
         result = subprocess.run(
             ["git", "pull", "--ff-only"],
             capture_output=True,
             text=True,
-            cwd=Path(__file__).parent,
+            cwd=project_dir,
             timeout=60
         )
 
         if result.returncode == 0:
             print_status("Actualización completada", "success")
+            if result.stdout.strip():
+                print_status(f"git pull: {result.stdout.strip()}", "info")
         else:
-            print_status("No se pudo actualizar automáticamente", "warning")
-            print_status("Puede haber cambios locales sin guardar", "warning")
+            print_status(f"git pull falló: {result.stderr.strip()}", "warning")
+            print_status("Puede haber cambios locales que impiden el fast-forward", "warning")
 
         return True
 
     except subprocess.TimeoutExpired:
-        print_status("Timeout al conectar con el repositorio", "warning")
+        print_status("Timeout al conectar con el repositorio (30s)", "warning")
         return True
     except FileNotFoundError:
-        return False  # Git no está instalado
-    except Exception:
+        print_status("Git no está instalado en este sistema", "info")
+        return False
+    except Exception as e:
+        print_status(f"Error inesperado en check_for_updates_git: {type(e).__name__}: {e}", "error")
         return False
 
 
 def check_for_updates_zip():
     """Actualiza usando descarga de ZIP desde GitHub (sin git)."""
-    # Verificar si hay actualizaciones comparando versiones
+    print_status("Usando método de actualización por ZIP (sin git)", "info")
+
     local_version = get_local_version()
     remote_version = get_github_latest_commit()
 
     if remote_version is None:
-        print_status("No se pudo conectar a GitHub", "warning")
+        print_status("No se pudo obtener la versión remota, saltando actualización", "warning")
         return True
+
+    print_status(f"Comparando versiones - Local: {local_version or '(ninguna)'} vs Remota: {remote_version}", "info")
 
     if local_version == remote_version:
         print_status("Ya tienes la última versión", "success")
@@ -266,24 +330,29 @@ def check_for_updates_zip():
 
     # Hay actualizaciones
     if local_version:
-        print_status(f"Nueva versión disponible: {remote_version}", "info")
+        print_status(f"Nueva versión disponible: {local_version} -> {remote_version}", "info")
     else:
-        print_status("Verificando primera actualización...", "info")
+        print_status(f"Primera instalación, descargando versión {remote_version}...", "info")
 
     return update_from_github_zip()
 
 
 def check_for_updates():
     """Verifica si hay actualizaciones en el repositorio de GitHub."""
-    print_status("Verificando actualizaciones...")
+    print_status("Verificando actualizaciones...", "info")
+    print_status(f"Repositorio: {GITHUB_OWNER}/{GITHUB_REPO} (rama: {GITHUB_BRANCH})", "info")
 
     # Intentar primero con git
-    if check_for_updates_git():
+    git_ok = check_for_updates_git()
+    if git_ok:
+        print_status("Verificación de actualizaciones completada (vía git)", "success")
         return True
 
     # Si git no está disponible, usar método de descarga ZIP
-    print_status("Git no disponible, usando descarga directa", "info")
-    return check_for_updates_zip()
+    print_status("Método git no disponible, intentando descarga directa ZIP...", "info")
+    result = check_for_updates_zip()
+    print_status("Verificación de actualizaciones completada (vía ZIP)", "success" if result else "warning")
+    return result
 
 
 def check_requirements():
@@ -478,7 +547,9 @@ def main():
     os.chdir(Path(__file__).parent)
 
     # Verificar actualizaciones de GitHub
-    if not skip_update:
+    if skip_update:
+        print_status("Actualización salteada (--no-update)", "warning")
+    else:
         check_for_updates()
 
     # Verificar dependencias

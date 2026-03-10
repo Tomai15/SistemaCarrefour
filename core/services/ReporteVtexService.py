@@ -157,7 +157,7 @@ class ReporteVtexService:
         Args:
             transacciones_df: DataFrame de pandas con las transacciones
                             Columnas esperadas: orderId, sequence, creationDate,
-                                              paymentNames, seller, statusDescription, totalValue
+                                              paymentNames, seller, statusDescription, valorFacturado
             reporte: Objeto ReporteVtex
 
         Returns:
@@ -174,10 +174,10 @@ class ReporteVtexService:
                 # Parsear fecha UTC — Django maneja la conversión a hora Argentina automáticamente
                 fecha_hora = pd.to_datetime(row['creationDate'], utc=True).to_pydatetime()
 
-                # Obtener el valor del pedido (viene en centavos, dividir por 100)
-                valor_raw = row.get('totalValue', None)
+                # Obtener el valor facturado neto (viene en centavos, dividir por 100)
+                valor_raw = row.get('valorFacturado', None)
                 valor = None
-                if valor_raw is not None:
+                if valor_raw is not None and not pd.isna(valor_raw):
                     try:
                         valor = float(valor_raw) / 100  # VTEX devuelve valores en centavos
                     except (ValueError, TypeError):
@@ -253,15 +253,53 @@ class ReporteVtexService:
         data = response.json()
         return data.get("list", []), data.get("paging", {}).get("pages", 0)
 
+    @staticmethod
+    def _calcular_valor_facturado(data: dict[str, Any]) -> float | None:
+        """
+        Calcula el valor facturado neto a partir de packageAttachment.
+
+        Lógica:
+        - Packages con items (facturas) → se suman sus invoiceValue
+        - Packages sin items y con restitutions (notas de crédito) → se restan sus invoiceValue
+
+        Args:
+            data: Respuesta completa del detalle del pedido
+
+        Returns:
+            float | None: Valor facturado en centavos, o None si no hay packages
+        """
+        package_attachment = data.get("packageAttachment")
+        if not package_attachment:
+            return None
+
+        packages = package_attachment.get("packages", [])
+        if not packages:
+            return None
+
+        valor_facturado = 0
+        for package in packages:
+            items = package.get("items", [])
+            restitutions = package.get("restitutions", {})
+            invoice_value = package.get("invoiceValue", 0) or 0
+
+            if items:
+                # Tiene items → es una factura, se suma
+                valor_facturado += invoice_value
+            elif restitutions:
+                # Sin items pero con restitutions → nota de crédito, se resta
+                valor_facturado -= invoice_value
+
+        return valor_facturado
+
     async def buscar_seller_async(
         self,
         session: aiohttp.ClientSession,
         order_id: str,
         url_base: str,
         headers: dict[str, str]
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, float | None]:
         """
-        Busca el seller de un pedido específico con rate limiting automático.
+        Busca el seller y valor facturado de un pedido con rate limiting automático.
 
         El rate limiter funciona como un "balde de fichas":
         - Tenemos 90 fichas por segundo
@@ -279,7 +317,7 @@ class ReporteVtexService:
             headers: Headers con credenciales
 
         Returns:
-            tuple: (order_id, nombre del seller)
+            tuple: (order_id, nombre del seller, valor facturado en centavos o None)
         """
         url_detalle = f"{url_base}/{order_id}"
 
@@ -301,9 +339,9 @@ class ReporteVtexService:
                             if response.status == 200:
                                 data = await response.json()
                                 sellers = data.get("sellers", [])
-                                if sellers:
-                                    return order_id, sellers[0].get("name", "No encontrado")
-                                return order_id, "Sin seller"
+                                seller = sellers[0].get("name", "No encontrado") if sellers else "Sin seller"
+                                valor_facturado = self._calcular_valor_facturado(data)
+                                return order_id, seller, valor_facturado
                             else:
                                 logger.warning(f"Status {response.status} para pedido {order_id}")
 
@@ -314,7 +352,7 @@ class ReporteVtexService:
                         logger.warning(f"Error al buscar seller para {order_id}: {e}")
                         await asyncio.sleep(2 ** intento)
 
-        return order_id, "Error al obtener seller"
+        return order_id, "Error al obtener seller", None
 
     async def obtener_todos_sellers(
         self,
@@ -359,11 +397,13 @@ class ReporteVtexService:
             # Procesar a medida que completan
             completados = 0
             for coro in asyncio.as_completed(tasks):
-                order_id, seller = await coro
+                order_id, seller, valor_facturado = await coro
 
                 # Asignación O(1) gracias al diccionario
                 if order_id in pedidos_unicos:
                     pedidos_unicos[order_id]["seller"] = seller
+                    if valor_facturado is not None:
+                        pedidos_unicos[order_id]["valorFacturado"] = valor_facturado
 
                 completados += 1
                 # Log de progreso cada 500 pedidos
@@ -476,8 +516,8 @@ class ReporteVtexService:
         # Convertir a DataFrame
         pedidos_vtex = pd.DataFrame(list(pedidos_unicos.values()))
 
-        # Seleccionar solo las columnas necesarias (incluye totalValue para el valor del pedido)
-        columnas_requeridas = ["orderId", "sequence", "creationDate", "paymentNames", "seller", "statusDescription", "totalValue"]
+        # Seleccionar solo las columnas necesarias (incluye valorFacturado para el valor facturado neto)
+        columnas_requeridas = ["orderId", "sequence", "creationDate", "paymentNames", "seller", "statusDescription", "valorFacturado"]
         columnas_disponibles = [col for col in columnas_requeridas if col in pedidos_vtex.columns]
         pedidos_vtex = pedidos_vtex[columnas_disponibles]
 

@@ -15,6 +15,8 @@ from core.models import (
     TransaccionCruce,
     ReporteJanis,
     TransaccionJanis,
+    ReporteMercadoPago,
+    TransaccionMercadoPago,
     TipoFiltroVtex,
     ValorFiltroVtex,
     FiltroReporteVtex,
@@ -44,6 +46,10 @@ admin.site.register(TransaccionCruce)
 # Janis
 admin.site.register(TransaccionJanis)
 admin.site.register(ReporteJanis)
+
+# MercadoPago
+admin.site.register(TransaccionMercadoPago)
+admin.site.register(ReporteMercadoPago)
 
 # Credenciales
 admin.site.register(UsuarioPayway)

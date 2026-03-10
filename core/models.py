@@ -332,6 +332,38 @@ class ReporteCDP(models.Model):
         data_frame_transacciones.to_excel(ruta_final, index=False)
         return ruta_final
 
+class ReporteMercadoPago(models.Model):
+    class Estado(models.TextChoices):
+        PENDIENTE = 'PENDIENTE', _('Pendiente')
+        PROCESANDO = 'PROCESANDO', _('Procesando')
+        COMPLETADO = 'COMPLETADO', _('Completado')
+        ERROR = 'ERROR', _('Error')
+
+    estado = models.CharField(
+        max_length=15,
+        choices=Estado.choices,
+        default=Estado.PENDIENTE
+    )
+    fecha_inicio = models.DateField()
+    fecha_fin = models.DateField()
+
+    def generar_reporter_excel(self) -> str:
+        """
+        Genera el archivo Excel del reporte y retorna la ruta completa del archivo generado.
+
+        Returns:
+            str: Ruta completa del archivo Excel generado
+        """
+        ruta_final = os.path.join(settings.MEDIA_ROOT, f'reporte_mercadopago_{self.fecha_inicio}_to_{self.fecha_fin}.xlsx')
+        transacciones = self.transacciones.all()
+        transacciones_convertidas = list(map(lambda transaccion: transaccion.convertir_en_diccionario(), transacciones))
+        data_frame_transacciones = pd.DataFrame(transacciones_convertidas)
+        if not data_frame_transacciones.empty and 'FECHA DE ORIGEN' in data_frame_transacciones.columns:
+            data_frame_transacciones['FECHA DE ORIGEN'] = pd.to_datetime(data_frame_transacciones['FECHA DE ORIGEN']).dt.tz_localize(None)
+        data_frame_transacciones.to_excel(ruta_final, index=False)
+        return ruta_final
+
+
 class ReporteJanis(models.Model):
     class Estado(models.TextChoices):
         PENDIENTE = 'PENDIENTE', _('Pendiente')
@@ -430,12 +462,18 @@ class Cruce(models.Model):
         'ReporteJanis', null=True, blank=True, on_delete=models.SET_NULL,
         related_name='cruces', verbose_name='Reporte Janis'
     )
+    reporte_mercado_pago = models.ForeignKey(
+        'ReporteMercadoPago', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='cruces', verbose_name='Reporte MercadoPago'
+    )
 
     def generar_reporter_excel(
         self,
         incluir_observaciones: bool = True,
         incluir_precio_payway: bool = False,
-        incluir_precio_vtex: bool = False
+        incluir_precio_vtex: bool = False,
+        incluir_diferencia: bool = False,
+        incluir_precio_mercado_pago: bool = False
     ) -> str:
         """
         Genera el archivo Excel del cruce.
@@ -444,6 +482,8 @@ class Cruce(models.Model):
             incluir_observaciones: Si es True, incluye la columna resultado_cruce
             incluir_precio_payway: Si es True, incluye las columnas monto_payway y monto_payway_2
             incluir_precio_vtex: Si es True, incluye la columna valor_vtex
+            incluir_diferencia: Si es True, incluye la columna diferencia
+            incluir_precio_mercado_pago: Si es True, incluye la columna monto_mercado_pago
 
         Returns:
             str: Ruta completa del archivo Excel generado
@@ -457,7 +497,9 @@ class Cruce(models.Model):
                 lambda t: t.convertir_en_diccionario(
                     incluir_observaciones=incluir_observaciones,
                     incluir_precio_payway=incluir_precio_payway,
-                    incluir_precio_vtex=incluir_precio_vtex
+                    incluir_precio_vtex=incluir_precio_vtex,
+                    incluir_diferencia=incluir_diferencia,
+                    incluir_precio_mercado_pago=incluir_precio_mercado_pago
                 ),
                 transacciones
             ))
@@ -526,6 +568,8 @@ class TransaccionCruce(models.Model):
     estado_payway_2 = models.CharField(max_length=100, blank=True, default='')
     estado_cdp = models.CharField(max_length=100, blank=True, default='')
     estado_janis = models.CharField(max_length=100, blank=True, default='')
+    estado_mercado_pago = models.CharField(max_length=100, blank=True, default='')
+    monto_mercado_pago = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     resultado_cruce = models.CharField(max_length=255, blank=True, default='')
     monto_payway = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     monto_payway_2 = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
@@ -536,7 +580,9 @@ class TransaccionCruce(models.Model):
         self,
         incluir_observaciones: bool = True,
         incluir_precio_payway: bool = False,
-        incluir_precio_vtex: bool = False
+        incluir_precio_vtex: bool = False,
+        incluir_diferencia: bool = False,
+        incluir_precio_mercado_pago: bool = False
     ) -> dict[str, Any]:
         datos: dict[str, Any] = {
             'Pedido': self.numero_pedido,
@@ -549,12 +595,32 @@ class TransaccionCruce(models.Model):
             'estado_payway_2': self.estado_payway_2,
             'estado_cdp': self.estado_cdp,
             'estado_janis': self.estado_janis,
+            'estado_mercado_pago': self.estado_mercado_pago,
         }
         if incluir_precio_vtex:
             datos['valor_vtex'] = self.valor_vtex
         if incluir_precio_payway:
             datos['monto_payway'] = self.monto_payway
             datos['monto_payway_2'] = self.monto_payway_2
+        if incluir_precio_mercado_pago:
+            datos['monto_mercado_pago'] = self.monto_mercado_pago
+        if incluir_diferencia:
+            es_mercado_pago = self.medio_pago and 'MercadoPago' in self.medio_pago
+            if es_mercado_pago and incluir_precio_mercado_pago:
+                # Para MercadoPago, la diferencia se calcula con monto_mercado_pago
+                if self.monto_mercado_pago is not None and self.valor_vtex is not None:
+                    datos['diferencia'] = self.monto_mercado_pago - self.valor_vtex
+                else:
+                    datos['diferencia'] = None
+            else:
+                # Para otros medios de pago, la diferencia se calcula con Payway
+                monto_payway_total = None
+                if self.monto_payway is not None or self.monto_payway_2 is not None:
+                    monto_payway_total = (self.monto_payway or 0) + (self.monto_payway_2 or 0)
+                if monto_payway_total is not None and self.valor_vtex is not None:
+                    datos['diferencia'] = monto_payway_total - self.valor_vtex
+                else:
+                    datos['diferencia'] = None
         if incluir_observaciones:
             datos['resultado_cruce'] = self.resultado_cruce
         return datos
@@ -607,6 +673,27 @@ class TransaccionPayway(models.Model):
     def estado_no_cobrado(self) -> bool:
         return any(keyword in self.estado for keyword in self.estados_no_entregados)
 
+class TransaccionMercadoPago(models.Model):
+    numero_identificacion = models.CharField(max_length=100)
+    id_operacion_mercado_pago = models.CharField(max_length=100)
+    fecha_hora = models.DateTimeField()
+    monto = models.DecimalField(max_digits=10, decimal_places=2)
+    tipo_operacion = models.CharField(max_length=100)
+    reporte = models.ForeignKey(ReporteMercadoPago, on_delete=models.CASCADE, related_name='transacciones')
+
+    def convertir_en_diccionario(self) -> dict[str, Any]:
+        return {
+            'NÚMERO DE IDENTIFICACIÓN': self.numero_identificacion,
+            'ID DE OPERACIÓN EN MERCADO PAGO': self.id_operacion_mercado_pago,
+            'FECHA DE ORIGEN': self.fecha_hora,
+            'VALOR DE LA COMPRA': self.monto,
+            'TIPO DE OPERACIÓN': self.tipo_operacion
+        }
+
+
+
+
+
 class TransaccionVtex(models.Model):
     numero_pedido = models.CharField(max_length=100)
     numero_transaccion = models.CharField(max_length=100)
@@ -619,7 +706,7 @@ class TransaccionVtex(models.Model):
         decimal_places=2,
         null=True,
         blank=True,
-        verbose_name='Valor del pedido'
+        verbose_name='Valor facturado'
     )
     KEYWORDS_FOOD: ClassVar[list[str]] = ["carrefour", "hiper", "maxi", "market", "express", "trelew"]
     reporte = models.ForeignKey(ReporteVtex, on_delete=models.CASCADE, related_name='transacciones')
@@ -632,7 +719,7 @@ class TransaccionVtex(models.Model):
             'medio_pago': self.medio_pago,
             'seller': self.seller,
             'estado': self.estado,
-            'valor': self.valor
+            'valor_facturado': self.valor
         }
 
     def pedido_electro(self) -> bool:

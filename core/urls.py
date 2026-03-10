@@ -42,6 +42,13 @@ urlpatterns = [
     path("reportesJanis/<int:pk>/reintentar/", views.ReporteJanisRetryView.as_view(), name="reintentar_reporte_janis"),
     path("reportesJanis/<int:pk>/eliminar/", views.ReporteJanisDeleteView.as_view(), name="eliminar_reporte_janis"),
 
+    # MercadoPago
+    path("reportesMercadoPago", views.reporteMercadoPagoListView.as_view(), name="lista_reportes_mercado_pago"),
+    path("reportesMercadoPago/importar", views.importar_reporte_mercado_pago_view, name="importar_reporte_mercado_pago"),
+    path("reportesMercadoPago/<int:pk>/", views.reporteMercadoPagoDetailView.as_view(), name="detalle_reporte_mercado_pago"),
+    path("reportesMercadoPago/<int:pk>/reporteExcel/", views.exportar_reporte_mercado_pago_excel, name="exportar_reporte_mercado_pago_excel"),
+    path("reportesMercadoPago/<int:pk>/eliminar/", views.ReporteMercadoPagoDeleteView.as_view(), name="eliminar_reporte_mercado_pago"),
+
     # Cruces
     path("cruces", views.cruceListView.as_view(), name="lista_cruces"),
     path("cruces/generar", views.generar_cruce_view, name="generar_cruce"),

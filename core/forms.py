@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from datetime import date
 from core.models import (
     UsuarioPayway, UsuarioCDP, ReporteVtex, ReportePayway, ReporteCDP, ReporteJanis,
+    ReporteMercadoPago,
     TipoFiltroVtex, ValorFiltroVtex, UsuarioCarrefourWeb, SellerVtex, SellerExterno
 )
 
@@ -340,6 +341,15 @@ class GenerarCruceForm(forms.Form):
         })
     )
 
+    reporte_mercado_pago = forms.ModelChoiceField(
+        queryset=ReporteMercadoPago.objects.filter(estado='COMPLETADO').order_by('-id'),
+        required=False,
+        empty_label="-- Ninguno --",
+        widget=forms.Select(attrs={
+            'class': 'form-control form-control-lg'
+        })
+    )
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         # Personalizar las etiquetas de los reportes para mostrar más información
@@ -347,6 +357,7 @@ class GenerarCruceForm(forms.Form):
         self.fields['reporte_payway'].label_from_instance = lambda obj: f"#{obj.id} - {obj.fecha_inicio} a {obj.fecha_fin}"
         self.fields['reporte_cdp'].label_from_instance = lambda obj: f"#{obj.id} - {obj.fecha_inicio} a {obj.fecha_fin}"
         self.fields['reporte_janis'].label_from_instance = lambda obj: f"#{obj.id} - {obj.fecha_inicio} a {obj.fecha_fin}"
+        self.fields['reporte_mercado_pago'].label_from_instance = lambda obj: f"#{obj.id} - {obj.fecha_inicio} a {obj.fecha_fin}"
 
     def clean(self) -> dict[str, Any]:
         """Validar que se seleccionen al menos 2 reportes de diferentes tipos."""
@@ -356,6 +367,7 @@ class GenerarCruceForm(forms.Form):
         reporte_payway = cleaned_data.get('reporte_payway')
         reporte_cdp = cleaned_data.get('reporte_cdp')
         reporte_janis = cleaned_data.get('reporte_janis')
+        reporte_mercado_pago = cleaned_data.get('reporte_mercado_pago')
 
         # Contar cuántos reportes se seleccionaron
         reportes_seleccionados = sum([
@@ -363,6 +375,7 @@ class GenerarCruceForm(forms.Form):
             1 if reporte_payway else 0,
             1 if reporte_cdp else 0,
             1 if reporte_janis else 0,
+            1 if reporte_mercado_pago else 0,
         ])
 
         if reportes_seleccionados < 2:

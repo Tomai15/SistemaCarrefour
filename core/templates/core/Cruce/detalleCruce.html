@@ -58,6 +58,20 @@
                                 Precio VTEX
                             </label>
                         </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input filtro-export" type="checkbox" id="filtro-precio-mercado-pago">
+                            <label class="form-check-label" for="filtro-precio-mercado-pago">
+                                <i class="bi bi-currency-dollar me-1"></i>
+                                Precio MercadoPago
+                            </label>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input filtro-export" type="checkbox" id="filtro-diferencia">
+                            <label class="form-check-label" for="filtro-diferencia">
+                                <i class="bi bi-plus-slash-minus me-1"></i>
+                                Diferencia
+                            </label>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -170,6 +184,10 @@
                                 Janis
                             </th>
                             <th scope="col" class="text-center">
+                                <i class="bi bi-currency-dollar me-1"></i>
+                                MercadoPago
+                            </th>
+                            <th scope="col" class="text-center">
                                 <i class="bi bi-clipboard-check me-1"></i>
                                 Resultado
                             </th>
@@ -270,6 +288,13 @@
                                 {% endif %}
                             </td>
                             <td class="text-center">
+                                {% if transaccion.estado_mercado_pago %}
+                                    <span class="badge bg-warning text-dark">{{ transaccion.estado_mercado_pago }}</span>
+                                {% else %}
+                                    <span class="badge bg-light text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
                                 {% if transaccion.resultado_cruce %}
                                     <span class="badge bg-warning text-dark" title="{{ transaccion.resultado_cruce }}">
                                         <i class="bi bi-exclamation-triangle me-1"></i>
@@ -360,6 +385,12 @@
             }
             if (document.getElementById('filtro-precio-vtex').checked) {
                 params.set('incluir_precio_vtex', '1');
+            }
+            if (document.getElementById('filtro-precio-mercado-pago').checked) {
+                params.set('incluir_precio_mercado_pago', '1');
+            }
+            if (document.getElementById('filtro-diferencia').checked) {
+                params.set('incluir_diferencia', '1');
             }
             btnExportar.href = baseUrl + '?' + params.toString();
         }
