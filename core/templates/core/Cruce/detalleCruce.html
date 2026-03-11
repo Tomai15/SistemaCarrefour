@@ -66,6 +66,13 @@
                             </label>
                         </div>
                         <div class="form-check form-switch">
+                            <input class="form-check-input filtro-export" type="checkbox" id="filtro-precio-bus">
+                            <label class="form-check-label" for="filtro-precio-bus">
+                                <i class="bi bi-receipt me-1"></i>
+                                Precio BUS
+                            </label>
+                        </div>
+                        <div class="form-check form-switch">
                             <input class="form-check-input filtro-export" type="checkbox" id="filtro-diferencia">
                             <label class="form-check-label" for="filtro-diferencia">
                                 <i class="bi bi-plus-slash-minus me-1"></i>
@@ -188,6 +195,10 @@
                                 MercadoPago
                             </th>
                             <th scope="col" class="text-center">
+                                <i class="bi bi-receipt me-1"></i>
+                                BUS
+                            </th>
+                            <th scope="col" class="text-center">
                                 <i class="bi bi-clipboard-check me-1"></i>
                                 Resultado
                             </th>
@@ -295,6 +306,13 @@
                                 {% endif %}
                             </td>
                             <td class="text-center">
+                                {% if transaccion.estado_bus %}
+                                    <span class="badge bg-info text-dark">{{ transaccion.estado_bus }}</span>
+                                {% else %}
+                                    <span class="badge bg-light text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
                                 {% if transaccion.resultado_cruce %}
                                     <span class="badge bg-warning text-dark" title="{{ transaccion.resultado_cruce }}">
                                         <i class="bi bi-exclamation-triangle me-1"></i>
@@ -388,6 +406,9 @@
             }
             if (document.getElementById('filtro-precio-mercado-pago').checked) {
                 params.set('incluir_precio_mercado_pago', '1');
+            }
+            if (document.getElementById('filtro-precio-bus').checked) {
+                params.set('incluir_precio_bus', '1');
             }
             if (document.getElementById('filtro-diferencia').checked) {
                 params.set('incluir_diferencia', '1');

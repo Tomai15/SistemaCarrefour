@@ -17,7 +17,7 @@ import os
 from django_q.tasks import async_task
 
 from core.models import (
-    ReportePayway, ReporteVtex, ReporteCDP, ReporteJanis, ReporteMercadoPago, Cruce,
+    ReportePayway, ReporteVtex, ReporteCDP, ReporteJanis, ReporteMercadoPago, ReporteBUS, Cruce,
     UsuarioPayway, UsuarioCDP, UsuarioCarrefourWeb,
     ValorFiltroVtex, FiltroReporteVtex,
     TareaCatalogacion, SellerVtex, SellerExterno
@@ -720,13 +720,15 @@ def exportar_cruce_excel(request: HttpRequest, pk: int) -> HttpResponse:
     incluir_precio_vtex = request.GET.get('incluir_precio_vtex') == '1'
     incluir_diferencia = request.GET.get('incluir_diferencia') == '1'
     incluir_precio_mercado_pago = request.GET.get('incluir_precio_mercado_pago') == '1'
+    incluir_precio_bus = request.GET.get('incluir_precio_bus') == '1'
 
     ruta_archivo = cruce.generar_reporter_excel(
         incluir_observaciones=incluir_observaciones,
         incluir_precio_payway=incluir_precio_payway,
         incluir_precio_vtex=incluir_precio_vtex,
         incluir_diferencia=incluir_diferencia,
-        incluir_precio_mercado_pago=incluir_precio_mercado_pago
+        incluir_precio_mercado_pago=incluir_precio_mercado_pago,
+        incluir_precio_bus=incluir_precio_bus
     )
 
     if not os.path.exists(ruta_archivo):
@@ -845,6 +847,108 @@ def importar_reporte_mercado_pago_view(request: HttpRequest) -> HttpResponse:
     return render(request, 'core/MercadoPago/importarReporte.html')
 
 
+# =============================================================================
+# BUS - VIEWS
+# =============================================================================
+
+class reporteBUSListView(ListView):
+    model = ReporteBUS
+    paginate_by = 50
+    template_name = 'core/BUS/vistaReportes.html'
+    ordering = ['-id']
+
+
+class reporteBUSDetailView(SingleObjectMixin, ListView):
+    template_name = 'core/BUS/detalleReporte.html'
+    paginate_by = 20
+
+    def get(self, request, *args, **kwargs):
+        self.object = self.get_object(queryset=ReporteBUS.objects.all())
+        return super().get(request, *args, **kwargs)
+
+    def get_queryset(self):
+        return self.object.transacciones.all().order_by('-id')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['reporte'] = self.object
+        return context
+
+
+def exportar_reporte_bus_excel(request: HttpRequest, pk: int) -> HttpResponse:
+    """Vista para exportar un reporte BUS a Excel."""
+    reporte = get_object_or_404(ReporteBUS, pk=pk)
+    ruta_archivo = reporte.generar_reporter_excel()
+
+    if not os.path.exists(ruta_archivo):
+        raise Http404("El archivo no se generó correctamente")
+
+    nombre_archivo = os.path.basename(ruta_archivo)
+    response = FileResponse(
+        open(ruta_archivo, 'rb'),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{nombre_archivo}"'
+    return response
+
+
+def importar_reporte_bus_view(request: HttpRequest) -> HttpResponse:
+    """Vista para importar un reporte BUS desde un archivo Excel."""
+    if request.method == 'POST':
+        archivo = request.FILES.get('archivo_excel')
+        fecha_inicio_str = request.POST.get('fecha_inicio')
+        fecha_fin_str = request.POST.get('fecha_fin')
+
+        if not archivo:
+            messages.error(request, 'Debe seleccionar un archivo Excel.')
+            return redirect('lista_reportes_bus')
+
+        if not fecha_inicio_str or not fecha_fin_str:
+            messages.error(request, 'Debe ingresar las fechas de inicio y fin.')
+            return redirect('lista_reportes_bus')
+
+        if not archivo.name.endswith(('.xlsx', '.xls')):
+            messages.error(request, 'El archivo debe ser un Excel (.xlsx o .xls).')
+            return redirect('lista_reportes_bus')
+
+        try:
+            from datetime import datetime
+            fecha_inicio = datetime.strptime(fecha_inicio_str, '%Y-%m-%d').date()
+            fecha_fin = datetime.strptime(fecha_fin_str, '%Y-%m-%d').date()
+
+            if fecha_inicio > fecha_fin:
+                messages.error(request, 'La fecha de inicio no puede ser posterior a la fecha de fin.')
+                return redirect('lista_reportes_bus')
+
+            nuevo_reporte = ReporteBUS.objects.create(
+                fecha_inicio=fecha_inicio,
+                fecha_fin=fecha_fin,
+                estado=ReporteBUS.Estado.PROCESANDO
+            )
+
+            from core.services.ReporteBUSService import ReporteBUSService
+            servicio = ReporteBUSService()
+            cantidad = servicio.importar_desde_excel(archivo, nuevo_reporte)
+
+            nuevo_reporte.estado = ReporteBUS.Estado.COMPLETADO
+            nuevo_reporte.save()
+
+            messages.success(
+                request,
+                f'Reporte importado exitosamente. {cantidad} transacciones procesadas.'
+            )
+            return redirect('lista_reportes_bus')
+
+        except Exception as e:
+            messages.error(request, f'Error al importar el archivo: {str(e)}')
+            if 'nuevo_reporte' in locals():
+                nuevo_reporte.estado = ReporteBUS.Estado.ERROR
+                nuevo_reporte.save()
+            return redirect('lista_reportes_bus')
+
+    return render(request, 'core/BUS/importarReporte.html')
+
+
 def generar_cruce_view(request: HttpRequest) -> HttpResponse:
     """
     Vista para generar un nuevo cruce de reportes.
@@ -860,6 +964,7 @@ def generar_cruce_view(request: HttpRequest) -> HttpResponse:
             reporte_cdp = form.cleaned_data.get('reporte_cdp')
             reporte_janis = form.cleaned_data.get('reporte_janis')
             reporte_mercado_pago = form.cleaned_data.get('reporte_mercado_pago')
+            reporte_bus = form.cleaned_data.get('reporte_bus')
 
             # Determinar fecha_inicio y fecha_fin basándose en los reportes seleccionados
             fechas_inicio = []
@@ -880,6 +985,9 @@ def generar_cruce_view(request: HttpRequest) -> HttpResponse:
             if reporte_mercado_pago:
                 fechas_inicio.append(reporte_mercado_pago.fecha_inicio)
                 fechas_fin.append(reporte_mercado_pago.fecha_fin)
+            if reporte_bus:
+                fechas_inicio.append(reporte_bus.fecha_inicio)
+                fechas_fin.append(reporte_bus.fecha_fin)
 
             # Usar la fecha más temprana como inicio y la más tardía como fin
             fecha_inicio = min(fechas_inicio)
@@ -894,7 +1002,8 @@ def generar_cruce_view(request: HttpRequest) -> HttpResponse:
                 reporte_payway=reporte_payway,
                 reporte_cdp=reporte_cdp,
                 reporte_janis=reporte_janis,
-                reporte_mercado_pago=reporte_mercado_pago
+                reporte_mercado_pago=reporte_mercado_pago,
+                reporte_bus=reporte_bus
             )
 
             # Encolar tarea en Django-Q
@@ -906,7 +1015,8 @@ def generar_cruce_view(request: HttpRequest) -> HttpResponse:
                     reporte_payway.id if reporte_payway else None,
                     reporte_cdp.id if reporte_cdp else None,
                     reporte_janis.id if reporte_janis else None,
-                    reporte_mercado_pago.id if reporte_mercado_pago else None
+                    reporte_mercado_pago.id if reporte_mercado_pago else None,
+                    reporte_bus.id if reporte_bus else None
                 )
 
                 messages.success(
@@ -1073,6 +1183,12 @@ class ReporteMercadoPagoDeleteView(ReporteDeleteMixin, DeleteView):
     success_url = reverse_lazy('lista_reportes_mercado_pago')
 
 
+# --- BUS ---
+class ReporteBUSDeleteView(ReporteDeleteMixin, DeleteView):
+    model = ReporteBUS
+    success_url = reverse_lazy('lista_reportes_bus')
+
+
 # --- CRUCES ---
 class CruceRetryView(View):
     """
@@ -1099,7 +1215,8 @@ class CruceRetryView(View):
                 cruce.reporte_payway.id if cruce.reporte_payway else None,
                 cruce.reporte_cdp.id if cruce.reporte_cdp else None,
                 cruce.reporte_janis.id if cruce.reporte_janis else None,
-                cruce.reporte_mercado_pago.id if cruce.reporte_mercado_pago else None
+                cruce.reporte_mercado_pago.id if cruce.reporte_mercado_pago else None,
+                cruce.reporte_bus.id if cruce.reporte_bus else None
             )
             messages.success(request, f'Cruce #{cruce.id} encolado para reintento.')
         except Exception as e:

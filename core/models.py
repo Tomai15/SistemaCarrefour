@@ -466,6 +466,10 @@ class Cruce(models.Model):
         'ReporteMercadoPago', null=True, blank=True, on_delete=models.SET_NULL,
         related_name='cruces', verbose_name='Reporte MercadoPago'
     )
+    reporte_bus = models.ForeignKey(
+        'ReporteBUS', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='cruces', verbose_name='Reporte BUS'
+    )
 
     def generar_reporter_excel(
         self,
@@ -473,7 +477,8 @@ class Cruce(models.Model):
         incluir_precio_payway: bool = False,
         incluir_precio_vtex: bool = False,
         incluir_diferencia: bool = False,
-        incluir_precio_mercado_pago: bool = False
+        incluir_precio_mercado_pago: bool = False,
+        incluir_precio_bus: bool = False
     ) -> str:
         """
         Genera el archivo Excel del cruce.
@@ -499,7 +504,8 @@ class Cruce(models.Model):
                     incluir_precio_payway=incluir_precio_payway,
                     incluir_precio_vtex=incluir_precio_vtex,
                     incluir_diferencia=incluir_diferencia,
-                    incluir_precio_mercado_pago=incluir_precio_mercado_pago
+                    incluir_precio_mercado_pago=incluir_precio_mercado_pago,
+                    incluir_precio_bus=incluir_precio_bus
                 ),
                 transacciones
             ))
@@ -570,6 +576,8 @@ class TransaccionCruce(models.Model):
     estado_janis = models.CharField(max_length=100, blank=True, default='')
     estado_mercado_pago = models.CharField(max_length=100, blank=True, default='')
     monto_mercado_pago = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    estado_bus = models.CharField(max_length=100, blank=True, default='')
+    monto_bus = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     resultado_cruce = models.CharField(max_length=255, blank=True, default='')
     monto_payway = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     monto_payway_2 = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
@@ -582,7 +590,8 @@ class TransaccionCruce(models.Model):
         incluir_precio_payway: bool = False,
         incluir_precio_vtex: bool = False,
         incluir_diferencia: bool = False,
-        incluir_precio_mercado_pago: bool = False
+        incluir_precio_mercado_pago: bool = False,
+        incluir_precio_bus: bool = False
     ) -> dict[str, Any]:
         datos: dict[str, Any] = {
             'Pedido': self.numero_pedido,
@@ -596,6 +605,7 @@ class TransaccionCruce(models.Model):
             'estado_cdp': self.estado_cdp,
             'estado_janis': self.estado_janis,
             'estado_mercado_pago': self.estado_mercado_pago,
+            'estado_bus': self.estado_bus,
         }
         if incluir_precio_vtex:
             datos['valor_vtex'] = self.valor_vtex
@@ -604,21 +614,27 @@ class TransaccionCruce(models.Model):
             datos['monto_payway_2'] = self.monto_payway_2
         if incluir_precio_mercado_pago:
             datos['monto_mercado_pago'] = self.monto_mercado_pago
+        if incluir_precio_bus:
+            datos['monto_bus'] = self.monto_bus
         if incluir_diferencia:
+            # Si BUS está incluido, usar monto_bus en lugar de valor_vtex como referencia
+            if incluir_precio_bus and self.monto_bus is not None:
+                monto_referencia = self.monto_bus
+            else:
+                monto_referencia = self.valor_vtex
+
             es_mercado_pago = self.medio_pago and 'MercadoPago' in self.medio_pago
             if es_mercado_pago and incluir_precio_mercado_pago:
-                # Para MercadoPago, la diferencia se calcula con monto_mercado_pago
-                if self.monto_mercado_pago is not None and self.valor_vtex is not None:
-                    datos['diferencia'] = self.monto_mercado_pago - self.valor_vtex
+                if self.monto_mercado_pago is not None and monto_referencia is not None:
+                    datos['diferencia'] = self.monto_mercado_pago - monto_referencia
                 else:
                     datos['diferencia'] = None
             else:
-                # Para otros medios de pago, la diferencia se calcula con Payway
                 monto_payway_total = None
                 if self.monto_payway is not None or self.monto_payway_2 is not None:
                     monto_payway_total = (self.monto_payway or 0) + (self.monto_payway_2 or 0)
-                if monto_payway_total is not None and self.valor_vtex is not None:
-                    datos['diferencia'] = monto_payway_total - self.valor_vtex
+                if monto_payway_total is not None and monto_referencia is not None:
+                    datos['diferencia'] = monto_payway_total - monto_referencia
                 else:
                     datos['diferencia'] = None
         if incluir_observaciones:
@@ -688,6 +704,48 @@ class TransaccionMercadoPago(models.Model):
             'FECHA DE ORIGEN': self.fecha_hora,
             'VALOR DE LA COMPRA': self.monto,
             'TIPO DE OPERACIÓN': self.tipo_operacion
+        }
+
+
+class ReporteBUS(models.Model):
+    class Estado(models.TextChoices):
+        PENDIENTE = 'PENDIENTE', _('Pendiente')
+        PROCESANDO = 'PROCESANDO', _('Procesando')
+        COMPLETADO = 'COMPLETADO', _('Completado')
+        ERROR = 'ERROR', _('Error')
+
+    estado = models.CharField(
+        max_length=15,
+        choices=Estado.choices,
+        default=Estado.PENDIENTE
+    )
+    fecha_inicio = models.DateField()
+    fecha_fin = models.DateField()
+
+    def generar_reporter_excel(self) -> str:
+        ruta_final = os.path.join(settings.MEDIA_ROOT, f'reporte_bus_{self.fecha_inicio}_to_{self.fecha_fin}.xlsx')
+        transacciones = self.transacciones.all()
+        transacciones_convertidas = list(map(lambda transaccion: transaccion.convertir_en_diccionario(), transacciones))
+        data_frame_transacciones = pd.DataFrame(transacciones_convertidas)
+        data_frame_transacciones.to_excel(ruta_final, index=False)
+        return ruta_final
+
+
+class TransaccionBUS(models.Model):
+    pedido = models.CharField(max_length=100)
+    tipo_pedido = models.CharField(max_length=20)
+    tipo_comprobante = models.CharField(max_length=100, blank=True, default='')
+    importe_total = models.DecimalField(max_digits=12, decimal_places=2)
+    fecha_recepcion_datos = models.CharField(max_length=100, blank=True, default='')
+    reporte = models.ForeignKey(ReporteBUS, on_delete=models.CASCADE, related_name='transacciones')
+
+    def convertir_en_diccionario(self) -> dict[str, Any]:
+        return {
+            'PEDIDO': self.pedido,
+            'TIPO PEDIDO': self.tipo_pedido,
+            'TIPO COMPROBANTE': self.tipo_comprobante,
+            'IMPORTE TOTAL': self.importe_total,
+            'FECHA RECEPCION DATOS': self.fecha_recepcion_datos,
         }
 
 

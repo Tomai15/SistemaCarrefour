@@ -57,7 +57,7 @@
                         </h6>
                         <ul class="mb-0">
                             <li>Seleccione <strong>al menos 2 reportes</strong> de diferentes tipos</li>
-                            <li>Solo puede seleccionar <strong>1 reporte por tipo</strong> (VTEX, Payway, CDP, Janis, MercadoPago)</li>
+                            <li>Solo puede seleccionar <strong>1 reporte por tipo</strong> (VTEX, Payway, CDP, Janis, MercadoPago, BUS)</li>
                             <li>Los reportes deben estar en estado <strong>COMPLETADO</strong></li>
                             <li>El cruce se procesará de forma asíncrona</li>
                         </ul>
@@ -215,6 +215,34 @@
                         <small class="text-muted mt-2 d-block">
                             <i class="bi bi-info-circle me-1"></i>
                             Opcional - Seleccione un reporte MercadoPago completado
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reportes BUS -->
+            <div class="col-md-6 col-lg-3 mb-4">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-dark text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-file-earmark-text me-2"></i>
+                            Reporte BUS
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <label for="{{ form.reporte_bus.id_for_label }}" class="form-label fw-bold">
+                            Seleccionar reporte:
+                        </label>
+                        {{ form.reporte_bus }}
+                        {% if form.reporte_bus.errors %}
+                            <div class="invalid-feedback d-block">
+                                <i class="bi bi-exclamation-circle me-1"></i>
+                                {{ form.reporte_bus.errors.0 }}
+                            </div>
+                        {% endif %}
+                        <small class="text-muted mt-2 d-block">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Opcional - Seleccione un reporte BUS completado
                         </small>
                     </div>
                 </div>
