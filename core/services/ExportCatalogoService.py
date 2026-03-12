@@ -47,6 +47,12 @@ COLUMNAS_EXPORT = [
     'Motivo', 'Precio', 'Stock',
 ]
 
+COLUMNAS_IMAGENES = [
+    '_IDProducto', '_NombreProducto', '_IDSKU', '_NombreSku',
+    'ID de imagen', 'Nombre de imagen', 'URL de imagen',
+    'Texto de imagen', 'Etiqueta', 'CodigoReferenciaSKU',
+]
+
 
 @dataclass
 class _ContextoVtex:
@@ -167,6 +173,9 @@ class ExportCatalogoService:
                 precios, stocks, contexto, incluir_precio_stock
             )
 
+            # Construir filas de imagenes antes de liberar memoria
+            filas_imagenes = self._construir_filas_imagenes(sku_ids, detalles_skus)
+
             # Liberar memoria intermedia (ya no se necesitan)
             del detalles_skus, productos, precios, stocks
 
@@ -175,7 +184,7 @@ class ExportCatalogoService:
             catalogados = sum(1 for r in resultados if r.get('CATALOGADO') == 'SI')
 
             # Generar Excel
-            self._generar_excel(tarea, resultados)
+            self._generar_excel(tarea, resultados, filas_imagenes)
             self._actualizar_estado(tarea, TareaCatalogacion.Estado.COMPLETADO)
 
             tiempo_total = time.time() - inicio_total
@@ -383,12 +392,13 @@ class ExportCatalogoService:
                 resultados.append(self._resultado_error(sku_id, 'Error al consultar catalogo'))
                 continue
             # EAN: buscar primero en ProductSpecifications (FieldId 979), fallback a AlternateIds/Ean
-            specs = datos_sku.get('ProductSpecifications') or []
-            spec_ean = next((s for s in specs if s.get('FieldId') == 979), None)
-            ean_de_spec = (spec_ean['FieldValues'][0] if spec_ean and spec_ean.get('FieldValues') else '')
+            # PELIGRO, NO CORRESPONDE OBTENER EL EAN DESDE EL PRODUCTO
+            #specs = datos_sku.get('ProductSpecifications') or []
+            #spec_ean = next((s for s in specs if s.get('FieldId') == 979), None)
+            #ean_de_spec = (spec_ean['FieldValues'][0] if spec_ean and spec_ean.get('FieldValues') else '')
 
             product_id = str(datos_sku.get('ProductId', '') or '')
-            ean = ean_de_spec or datos_sku.get('AlternateIds', {}).get('RefId', '') or datos_sku.get('Ean', '') or ''
+            ean = datos_sku.get('AlternateIds', {}).get('RefId', '') or datos_sku.get('Ean', '') or ''
             brand_id = str(datos_sku.get('BrandId', '') or '')
 
             # Producto
@@ -421,7 +431,13 @@ class ExportCatalogoService:
                 contexto.sales_channels_filtro, precio, stock,
                 incluir_precio_stock,
             )
-            catalogado = activo and foto and bool(str(ean).strip())
+            # Catalogado: tiene imagen + categoria valida (no vacia, no default, no deshabilitados)
+            categorias_invalidas = {'', 'deshabilitados', 'categoria default', 'categoría default'}
+            categoria_valida = bool(cat_items) and all(
+                str(cat_name).strip().lower() not in categorias_invalidas
+                for _, cat_name in cat_items
+            )
+            catalogado = foto and categoria_valida
 
             sc_list = datos_sku.get('SalesChannels', [])
             sc_str = ', '.join(str(sc) for sc in sc_list) if sc_list else ''
@@ -488,6 +504,44 @@ class ExportCatalogoService:
             })
 
         return resultados
+
+    # -- Construir filas de imagenes ------------------------------------------
+
+    def _construir_filas_imagenes(
+        self, sku_ids: list[int], detalles_skus: list[dict | None],
+    ) -> list[dict]:
+        """Genera una fila por cada imagen de cada SKU."""
+        filas: list[dict] = []
+        for i, sku_id in enumerate(sku_ids):
+            datos_sku = detalles_skus[i]
+            if datos_sku is None:
+                continue
+            product_id = str(datos_sku.get('ProductId', '') or '')
+            product_name = datos_sku.get('ProductName', '') or ''
+            sku_name = datos_sku.get('SkuName', '') or ''
+            ref_id = datos_sku.get('AlternateIds', {}).get('RefId', '') or ''
+            for img in datos_sku.get('Images', []):
+                image_url = img.get('ImageUrl', '') or ''
+                # Limpiar URL: quitar https:// y query params
+                url_sin_params = image_url.split('?')[0]
+                url_limpia = url_sin_params.replace('https://', '').replace('http://', '')
+                # Nombre de imagen: ultimo segmento de la URL sin extension
+                nombre_archivo = ''
+                if '/' in url_sin_params:
+                    nombre_archivo = url_sin_params.rsplit('/', 1)[-1].rsplit('.', 1)[0]
+                filas.append({
+                    '_IDProducto': product_id,
+                    '_NombreProducto': product_name,
+                    '_IDSKU': int(sku_id),
+                    '_NombreSku': sku_name,
+                    'ID de imagen': img.get('FileId', ''),
+                    'Nombre de imagen': nombre_archivo,
+                    'URL de imagen': url_limpia,
+                    'Texto de imagen': nombre_archivo,
+                    'Etiqueta': '',
+                    'CodigoReferenciaSKU': ref_id,
+                })
+        return filas
 
     # -- Logica de columnas ---------------------------------------------------
 
@@ -623,7 +677,10 @@ class ExportCatalogoService:
         })
         return resultado
 
-    def _generar_excel(self, tarea: TareaCatalogacion, resultados: list[dict]) -> None:
+    def _generar_excel(
+        self, tarea: TareaCatalogacion, resultados: list[dict],
+        filas_imagenes: list[dict] | None = None,
+    ) -> None:
         ahora = datetime.now()
         nombre = f'EXPORT_VTEX_{ahora.day}_{ahora.month}.xlsx'
         directorio_relativo = os.path.join('output', str(ahora.year), str(ahora.month), str(ahora.day))
@@ -632,7 +689,9 @@ class ExportCatalogoService:
         ruta_final = os.path.join(directorio, nombre)
 
         wb = Workbook(write_only=True)
-        ws = wb.create_sheet()
+
+        # Solapa 1: Catalogacion
+        ws = wb.create_sheet(title='Catalogacion')
         ws.append(COLUMNAS_EXPORT)
         for fila in resultados:
             valores = []
@@ -642,6 +701,20 @@ class ExportCatalogoService:
                     v = _limpiar_para_excel(v)
                 valores.append(v)
             ws.append(valores)
+
+        # Solapa 2: Imagenes
+        if filas_imagenes:
+            ws_img = wb.create_sheet(title='Imagenes')
+            ws_img.append(COLUMNAS_IMAGENES)
+            for fila in filas_imagenes:
+                valores = []
+                for col in COLUMNAS_IMAGENES:
+                    v = fila.get(col, '')
+                    if isinstance(v, str):
+                        v = _limpiar_para_excel(v)
+                    valores.append(v)
+                ws_img.append(valores)
+
         wb.save(ruta_final)
 
         # Solo setear en memoria, se guarda a DB en _finalizar_estado
