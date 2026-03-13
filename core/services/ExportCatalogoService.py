@@ -742,9 +742,21 @@ class ExportCatalogoService:
             'progreso_total': self._progreso_total,
         }
         ruta_tmp = self._ruta_temporal + '.tmp'
-        with open(ruta_tmp, 'w', encoding='utf-8') as f:
-            json.dump(datos, f)
-        os.replace(ruta_tmp, self._ruta_temporal)
+        try:
+            with open(ruta_tmp, 'w', encoding='utf-8') as f:
+                json.dump(datos, f)
+            # os.replace puede fallar en Windows si otro proceso tiene el archivo abierto
+            for intento in range(3):
+                try:
+                    os.replace(ruta_tmp, self._ruta_temporal)
+                    return
+                except PermissionError:
+                    time.sleep(0.05)
+            # Fallback: escribir directo al archivo destino
+            with open(self._ruta_temporal, 'w', encoding='utf-8') as f:
+                json.dump(datos, f)
+        except Exception:
+            pass
 
     def _finalizar_estado(self, tarea: TareaCatalogacion) -> None:
         """Vuelca todo a DB en un solo save y elimina el archivo temporal."""
